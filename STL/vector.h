@@ -5,11 +5,13 @@
 #include <iterator>
 #include <type_traits>
 #include <initializer_list>
+#include <iostream>
 
 STL_BEGIN
 
-template <class T, class Allocator = allocator<T>>
-class vector {
+template <class T, class Allocator = std::allocator<T>>
+class vector 
+{
 public:
 // typedef.
     typedef T                                        value_type;
@@ -24,17 +26,17 @@ public:
     typedef typename allocator_type::const_pointer   const_pointer;
     typedef std::reverse_iterator<iterator>          reverse_iterator;
     typedef std::reverse_iterator<const_iterator>    const_reverse_iterator;
-// construtor.
+// constructor.
     vector() noexcept(std::is_nothrow_default_constructible<allocator_type>::value);
-    explicit vector(const allocator_type&);
+    explicit vector(const allocator_type& alloc);
     explicit vector(size_type n);
-    explicit vector(size_type n, const allocator_type&); 
-    vector(size_type n, const value_type& value, const allocator_type& = allocator_type());
+    explicit vector(size_type n, const allocator_type& alloc); 
+    vector(size_type n, const value_type& value, const allocator_type& alloc = allocator_type());
     template <class InputIterator>
-        vector(InputIterator first, InputIterator last, const allocator_type& = allocator_type());
+        vector(InputIterator first, InputIterator last, const allocator_type& alloc = allocator_type());
     vector(const vector& x);
     vector(vector&& x) noexcept(std::is_nothrow_move_constructible<allocator_type>::value);
-    vector(std::initializer_list<value_type> init, const allocator_type& = allocator_type());
+    vector(std::initializer_list<value_type> init, const allocator_type& alloc = allocator_type());
 // deconstructor.
     ~vector();
 // assignment operator.
@@ -109,16 +111,166 @@ public:
         std::allocator_traits<allocator_type>::propagate_on_container_swap::value
         || std::allocator_traits<allocator_type>::is_always_equal::value);
 private:
-    value_type* data_;
-    
+    void allocate_(size_type n);
+    void deallocate_();
+    void construct_default_at_(pointer loc);
+    void construct_at_(pointer loc, const value_type& value);
+    void destroy_at_(pointer loc);
+
+    allocator_type alloc_;
+    pointer begin_;
+    pointer end_;
+    pointer cap_;
 };
 
-// the implementation of vector constrctor.
+// private method.
+template <class T, class Allocator>
+void vector<T, Allocator>::allocate_(size_type n) {
+    begin_ = std::allocator_traits<allocator_type>::allocate(alloc_, n);
+    cap_ = begin_ + n;
+    end_ = begin_;
+}
+
+template <class T, class Allocator>
+void vector<T, Allocator>::deallocate_() {
+    std::allocator_traits<allocator_type>::deallocate(alloc_, begin_, size());
+}
+
+template <class T, class Allocator>
+void vector<T, Allocator>::construct_default_at_(pointer loc) {
+    std::allocator_traits<allocator_type>::construct(alloc_, loc);
+}
+
+template <class T, class Allocator>
+void vector<T, Allocator>::construct_at_(pointer loc, const value_type& value) {
+    std::allocator_traits<allocator_type>::construct(alloc_, loc, value);
+}
+
+template <class T, class Allocator>
+void vector<T, Allocator>::destroy_at_(pointer loc) {
+    std::allocator_traits<allocator_type>::destroy(alloc_, loc);
+}
 
 
+// the implementation of vector constructor.
+template <class T, class Allocator>
+vector<T, Allocator>::vector() noexcept(
+    std::is_nothrow_default_constructible<allocator_type>::value) : 
+    alloc_(allocator_type()),
+    begin_(nullptr),
+    end_(nullptr),
+    cap_(nullptr) {}
+
+template <class T, class Allocator>
+vector<T, Allocator>::vector(const allocator_type& alloc) : 
+    alloc_(alloc),
+    begin_(nullptr),
+    end_(nullptr),
+    cap_(nullptr) {}
+
+template <class T, class Allocator>
+vector<T, Allocator>::vector(size_type n) : 
+    alloc_(allocator_type()),
+    begin_(nullptr),
+    end_(nullptr),
+    cap_(nullptr) {
+    allocate_(n);
+    while(n-- > 0) {
+        construct_default_at_(end_++);
+    }
+}
+
+template <class T, class Allocator>
+vector<T, Allocator>::vector(size_type n, const allocator_type& alloc) :
+    alloc_(alloc),
+    begin_(nullptr),
+    end_(nullptr),
+    cap_(nullptr) {
+    allocate_(n);
+    while(n-- > 0) {
+        construct_default_at_(end_++);
+    }
+}
+
+template <class T, class Allocator>
+vector<T, Allocator>::vector(size_type n, const value_type& value, const allocator_type& alloc) :
+    alloc_(alloc),
+    begin_(nullptr),
+    end_(nullptr),
+    cap_(nullptr) {
+    allocate_(n);
+    while(n-- > 0) {
+        construct_at_(end_++, value);
+    }
+}
+/*****
+template <class T, class Allocator>
+template <class InputIterator>
+vector<T, Allocator>::vector(InputIterator first, InputIterator last, const allocator_type& alloc = allocator_type()) :
+    alloc_(alloc),
+    begin_(nullptr),
+    end_(nullptr),
+    cap_(nullptr) {
+    allocate_(std::distance(first, last));
+    while(first != last) {
+        construct_at(end_++, *first++);
+    }
+}
+****/
+template <class T, class Allocator>
+vector<T, Allocator>::vector(const vector& x) :
+    alloc_(x.alloc_), 
+    begin_(nullptr),
+    end_(nullptr),
+    cap_(nullptr) {
+    allocate_(x.size());
+    const_iterator first = x.begin();
+    const_iterator last = x.end();
+    while(first != last) {
+        construct_at_(end_++, *first++);
+    }
+}
+
+template <class T, class Allocator>
+vector<T, Allocator>::vector(vector&& x) noexcept(
+    std::is_nothrow_move_constructible<allocator_type>::value) : 
+    alloc_(std::move(x.alloc_)),
+    begin_(x.begin_), 
+    end_(x.end_),
+    cap_(x.cap_) {
+    x.begin_ = nullptr;
+    x.end_ = nullptr;
+    x.cap_ = nullptr;
+}
+
+template <class T, class Allocator>
+vector<T, Allocator>::vector(std::initializer_list<value_type> init, const allocator_type& alloc) :
+    alloc_(alloc),
+    begin_(nullptr),
+    end_(nullptr),
+    cap_(nullptr) {
+    allocate_(init.size());
+    const_iterator first = init.begin();
+    const_iterator last = init.end();
+    while(first != last) {
+        construct_at_(end_++, *first++);
+    }
+}
+
+template <class T, class Allocator>
+vector<T, Allocator>::~vector() {
+    while(end_ != begin_) {
+        destroy_at_(--end_);
+    }
+    deallocate_();
+}
 
 
-
+// size.
+template <class T, class Allocator>
+typename vector<T, Allocator>::size_type vector<T, Allocator>::size() const noexcept { 
+    return end_ - begin_;
+}
 
 STL_END
 

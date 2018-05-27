@@ -8,8 +8,8 @@
 
 STL_BEGIN
 
-template <class T>
-using allocator = std::allocator<T>;
+//template <class T>
+//using allocator = std::allocator<T>;
 
 STL_END
 
