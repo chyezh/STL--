@@ -5,6 +5,9 @@
 .vs
 .vscode
 
+# libcxx
+libcxx
+
 # Compiled Object files
 *.slo
 *.lo
