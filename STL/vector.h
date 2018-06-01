@@ -1,11 +1,12 @@
-#ifndef STL_VECTOR__
-#define STL_VECTOR__
+#ifndef _STL_VECTOR__
+#define _STL_VECTOR__
 
 #include <initializer_list>
 #include <iostream>
 #include <iterator>
 #include <stdexcept>
 #include "Def/stldef.h"
+#include "__split_buffer.h"
 
 STL_BEGIN
 
@@ -16,7 +17,7 @@ class __vector_base {
   // typedef
   typedef T value_type;
   typedef Allocator allocator_type;
-  typedef std::allocator_traits<allocator_type> alloc_traits_;
+  typedef allocator_traits<allocator_type> alloc_traits_;
   typedef typename alloc_traits_::reference reference;
   typedef typename alloc_traits_::const_reference const_reference;
   typedef typename alloc_traits_::pointer iterator;
@@ -79,7 +80,7 @@ class __vector_base {
       !alloc_traits_::propagate_on_container_move_assignment::value ||
       std::is_nothrow_move_assignable<allocator_type>::value) {
     move_assign_alloc_(
-        x, std::integral_constant<
+        x, integral_constant<
                bool,
                alloc_traits_::propagate_on_container_move_assignment::value>());
   }
@@ -88,7 +89,7 @@ class __vector_base {
   // auxiliary function
   // propagate_on_container_copy_assignment
   // allocator need to be copied when container is copy-assigned
-  void copy_assign_alloc_(const __vector_base &x, std::true_type) {
+  void copy_assign_alloc_(const __vector_base &x, true_type) {
     // deallocate when allocators do not compare equal.
     if (alloc_ != x.alloc_) {
       clear();
@@ -99,18 +100,18 @@ class __vector_base {
   }
 
   // copy-trival for allocator.
-  void copy_assign_alloc_(const __vector_base &x, std::false_type) {}
+  void copy_assign_alloc_(const __vector_base &x, false_type) {}
 
   // propagate_on_container_move_assignment
   // allocator need to be moved when container is move-assigned
   // noexcept if allocator is nothrow move assignable
-  void move_assign_alloc_(const __vector_base &x, std::true_type) noexcept(
+  void move_assign_alloc_(const __vector_base &x, true_type) noexcept(
       std::is_nothrow_move_assignable<allocator_type>::value) {
     alloc_ = std::move(x.alloc_);
   }
 
   // move-trival for allocator. noexcept
-  void move_assign_alloc_(const __vector_base &x, std::false_type) noexcept {}
+  void move_assign_alloc_(const __vector_base &x, false_type) noexcept {}
 
  protected:
   allocator_type alloc_;
@@ -119,7 +120,7 @@ class __vector_base {
   pointer cap_;
 };
 
-template <class T, class Allocator = std::allocator<T>>
+template <class T, class Allocator = allocator<T>>
 class vector : private __vector_base<T, Allocator> {
  private:
   typedef __vector_base<T, Allocator> base_;
@@ -158,24 +159,69 @@ class vector : private __vector_base<T, Allocator> {
   vector(size_type n, const value_type &value, const allocator_type &alloc);
 
   // constructor with given range
+  // if range iterator is input iterator
   template <class InputIterator>
-  vector(InputIterator first, InputIterator last,
-         const allocator_type &alloc = allocator_type());
+  vector(InputIterator first,
+         typename enable_if<
+             __is_input_iterator<InputIterator>::value &&
+                 !__is_forward_iterator<InputIterator>::value &&
+                 is_constructible<
+                     value_type,
+                     typename iterator_traits<InputIterator>::reference>::value,
+             InputIterator>::type last);
+
+  template <class InputIterator>
+  vector(InputIterator first,
+         typename enable_if<
+             __is_input_iterator<InputIterator>::value &&
+                 !__is_forward_iterator<InputIterator>::value &&
+                 is_constructible<
+                     value_type,
+                     typename iterator_traits<InputIterator>::reference>::value,
+             InputIterator>::type last,
+         const allocator_type &alloc);
+
+  // if range iterator is forward iterator
+  template <class ForwardIterator>
+  vector(
+      ForwardIterator first,
+      typename enable_if<
+          __is_forward_iterator<ForwardIterator>::value &&
+              is_constructible<
+                  value_type,
+                  typename iterator_traits<ForwardIterator>::reference>::value,
+          ForwardIterator>::type last);
+
+  template <class ForwardIterator>
+  vector(
+      ForwardIterator first,
+      typename enable_if<
+          __is_forward_iterator<ForwardIterator>::value &&
+              is_constructible<
+                  value_type,
+                  typename iterator_traits<ForwardIterator>::reference>::value,
+          ForwardIterator>::type last,
+      const allocator_type &alloc);
 
   // copy constructor
   vector(const vector &x);
+
+  vector(const vector &x, const allocator_type &alloc);
 
   // move constructor
   // noexcept if allocator is nothrow move constructible
   vector(vector &&x) noexcept(
       std::is_nothrow_move_constructible<allocator_type>::value);
 
+  vector(vector &&x, const allocator_type &alloc);
+
   // constructor with initial list
-  vector(std::initializer_list<value_type> init,
-         const allocator_type &alloc = allocator_type());
+  vector(std::initializer_list<value_type> init);
+
+  vector(std::initializer_list<value_type> init, const allocator_type &alloc);
 
   // deconstructor
-  ~vector();
+  ~vector() {}
 
   // assignment operator
   vector &operator=(const vector &x);
@@ -276,8 +322,11 @@ class vector : private __vector_base<T, Allocator> {
   // insert
   void push_back(const value_type &value);
   void push_back(value_type &&value);
+
+  // emplace
   template <class... Args>
   reference emplace_back(Args &&... args);
+  
   template <class... Args>
   iterator emplace(const_iterator position, Args &&... args);
   iterator insert(const_iterator position, const value_type &value);
@@ -304,15 +353,36 @@ class vector : private __vector_base<T, Allocator> {
   // throw length error
   void throw_length_error_() { throw std::length_error("vector"); }
 
+  // allocate n elements
   void allocate_(size_type n);
 
+  // destroy all elements and deallocate the space
   void deallocate_() noexcept;
 
+  /* construct at end */
+  // default construct n elements at end
   void default_construct_at_end_(size_type n);
 
+  // copy construct n elements at end with value
   void copy_construct_at_end_(size_type n, const_reference value);
 
-  size_type default_realloc_strategy_(size_type new_size) const {}
+  // copy construct n elements at end with element in the range
+  template <class ForwardIterator>
+  typename enable_if<__is_forward_iterator<ForwardIterator>::value, void>::type
+  copy_construct_at_end_(ForwardIterator first, ForwardIterator last);
+
+  // construct at end when capacity() == size().
+  template <class... Args>
+  void emplace_back_when_capacity_is_full_(Args&&... args);
+
+  // construct at end with constructor argument arg
+  template <class Arg>
+  void emplace_back_with_single_value_(Arg&& arg) {
+    // perfect forward
+    emplace_back(std::forward<Arg>(arg));
+  }
+
+  size_type default_realloc_strategy_(size_type new_size) const;
 };
 
 /* the implementation of vector private auxiliary function */
@@ -356,7 +426,7 @@ void vector<T, Allocator>::default_construct_at_end_(size_type n) {
   } while (--n > 0);
 }
 
-// copy constructs n element at end()
+// copy constructs n element at end() with value
 // throws if copy constructor of element throws
 // preconditon: n > 0; size() + n <= capacity()
 // postcondition: size() == size() + n
@@ -365,10 +435,48 @@ void vector<T, Allocator>::copy_construct_at_end_(size_type n,
                                                   const_reference value) {
   do {
     // copy constructor may throw.
-    alloc_traits_::construct(this->alloc_, __to_raw_pointer(this->end_), value));
+    alloc_traits_::construct(this->alloc_, __to_raw_pointer(this->end_), value);
     // updates end_ after construct success.
     ++this->end_;
   } while (--n > 0);
+}
+
+// copy constructs elements at end() with value of range first to last
+// throws if copy constructor of element throws
+// iterator must satisfy ForwardIterator
+// precondition: (d = distance(first, last)) > 0; size() + d <= capacity()
+// postcondition:  size() == size() + d
+template <class T, class Allocator>
+template <class ForwardIterator>
+typename enable_if<__is_forward_iterator<ForwardIterator>::value, void>::type
+vector<T, Allocator>::copy_construct_at_end_(ForwardIterator first,
+                                             ForwardIterator last) {
+  do {
+    // copy constructor may throw.
+    alloc_traits_::construct(this->alloc_, __to_raw_pointer(this->end_),
+                             *first);
+    // updates end_ after construct success.
+    ++this->end_;
+  } while (++first != last);
+}
+
+template <class T, class Allocator>
+template <class... Args>
+void vector<T, Allocator>::emplace_back_when_capacity_is_full_(Args&&... args) {
+  __split_buffer<value_type, allocator_type&> swap_buffer(default_realloc_strategy_(size()+1), size(), this->alloc_);
+  alloc_traits_::construct(this->alloc_, __to_raw_pointer(swap_buffer.end_), std::forward<Args>(args)...);
+  ++swap_buffer.end_;
+}
+
+template <class T, class Allocator>
+typename vector<T, Allocator>::size_type vector<T, Allocator>::default_realloc_strategy_(size_type new_size) const {
+  const size_type ms = max_size();
+  if (new_size > max_size())
+    this->throw_length_error_();
+  const size_type cap_now = capacity();
+  if (cap_now >= ms/2)
+    return ms;
+  return std::max<size_type>(2*cap_now, new_size);
 }
 
 /* the implementation of vector constructor */
@@ -408,67 +516,146 @@ vector<T, Allocator>::vector(size_type n, const value_type &value,
   }
 }
 
-/*****
+// constructor with given range
+// if range iterator is input iterator
 template <class T, class Allocator>
 template <class InputIterator>
-vector<T, Allocator>::vector(InputIterator first, InputIterator last, const
-allocator_type& alloc = allocator_type()) : alloc_(alloc), begin_(nullptr),
-    end_(nullptr),
-    cap_(nullptr) {
-    allocate_(std::distance(first, last));
-    while(first != last) {
-        construct_at(end_++, *first++);
-    }
+vector<T, Allocator>::vector(
+    InputIterator first,
+    typename enable_if<
+        __is_input_iterator<InputIterator>::value &&
+            !__is_forward_iterator<InputIterator>::value &&
+            is_constructible<value_type, typename iterator_traits<
+                                             InputIterator>::reference>::value,
+        InputIterator>::type last) {}
+
+template <class T, class Allocator>
+template <class InputIterator>
+vector<T, Allocator>::vector(
+    InputIterator first,
+    typename enable_if<
+        __is_input_iterator<InputIterator>::value &&
+            !__is_forward_iterator<InputIterator>::value &&
+            is_constructible<value_type, typename iterator_traits<
+                                             InputIterator>::reference>::value,
+        InputIterator>::type last,
+    const allocator_type &alloc) {}
+
+// if range iterator is forward iterator
+template <class T, class Allocator>
+template <class ForwardIterator>
+vector<T, Allocator>::vector(
+    ForwardIterator first,
+    typename enable_if<
+        __is_forward_iterator<ForwardIterator>::value &&
+            is_constructible<
+                value_type,
+                typename iterator_traits<ForwardIterator>::reference>::value,
+        ForwardIterator>::type last) {
+  // gets the element number for allocating enough space
+  size_type new_size = static_cast<size_type>(std::distance(last, first));
+  if (new_size > 0) {
+    allocate_(new_size);
+    copy_construct_at_end_(first, last);
+  }
 }
-****/
+
+template <class T, class Allocator>
+template <class ForwardIterator>
+vector<T, Allocator>::vector(
+    ForwardIterator first,
+    typename enable_if<
+        __is_forward_iterator<ForwardIterator>::value &&
+            is_constructible<
+                value_type,
+                typename iterator_traits<ForwardIterator>::reference>::value,
+        ForwardIterator>::type last,
+    const allocator_type &alloc) : base_(alloc) {
+  // gets the element number for allocating enough space
+  size_type new_size = static_cast<size_type>(std::distance(first, last));
+  if (new_size > 0) {
+    allocate_(new_size);
+    copy_construct_at_end_(first, last);
+  }
+}
+
 template <class T, class Allocator>
 vector<T, Allocator>::vector(const vector &x)
     : base_(alloc_traits_::select_on_container_copy_constrcution(x.alloc_)) {
   size_type new_size = x.size();
-  if(new_size > 0 ) {
+  if (new_size > 0) {
     allocate_(new_size);
-    
+    copy_construct_at_end_(x.begin(), x.end());
+  }
+}
+
+template <class T, class Allocator>
+vector<T, Allocator>::vector(const vector &x, const allocator_type &alloc)
+    : base_(alloc) {
+  size_type new_size = x.size();
+  if (new_size > 0) {
+    allocate_(new_size);
+    copy_construct_at_end_(x.begin(), x.end());
   }
 }
 
 template <class T, class Allocator>
 vector<T, Allocator>::vector(vector &&x) noexcept(
     std::is_nothrow_move_constructible<allocator_type>::value)
-    : alloc_(std::move(x.alloc_)),
-      begin_(x.begin_),
-      end_(x.end_),
-      cap_(x.cap_) {
-  x.begin_ = nullptr;
-  x.end_ = nullptr;
-  x.cap_ = nullptr;
+    : base_(std::move(x.alloc_)) {
+  this->begin_ = x.begin_;
+  this->end_ = x.end_;
+  this->cap_ = x.cap_;
+  x.begin_ = x.end_ = x.cap_ = nullptr;
+}
+
+template <class T, class Allocator>
+vector<T, Allocator>::vector(vector &&x, const allocator_type &alloc)
+    : base_(alloc) {
+  if (alloc == x.alloc_) {
+    this->begin_ = x.begin_;
+    this->end_ = x.end_;
+    this->cap_ = x.cap_;
+  } else
+    assign(std::move_iterator<iterator>(x.begin()), std::move_iterator<iterator>(x.end()));
+}
+
+template <class T, class Allocator>
+vector<T, Allocator>::vector(std::initializer_list<value_type> init) {
+  size_type new_size = init.size();
+  if (new_size > 0) {
+    allocate_(new_size);
+    copy_construct_at_end_(init.begin(), init.end());
+  }
 }
 
 template <class T, class Allocator>
 vector<T, Allocator>::vector(std::initializer_list<value_type> init,
                              const allocator_type &alloc)
-    : alloc_(alloc), begin_(nullptr), end_(nullptr), cap_(nullptr) {
-  allocate_(init.size());
-  const_iterator first = init.begin();
-  const_iterator last = init.end();
-  while (first != last) {
-    construct_at_(end_++, *first++);
+    : base_(alloc) {
+  size_type new_size = init.size();
+  if (new_size > 0) {
+    allocate_(new_size);
+    copy_construct_at_end_(init.begin(), init.end());
   }
-}
-
-template <class T, class Allocator>
-vector<T, Allocator>::~vector() {
-  while (end_ != begin_) {
-    destroy_at_(--end_);
-  }
-  deallocate_();
 }
 
 // size.
+
+// insert operation
+
 template <class T, class Allocator>
-typename vector<T, Allocator>::size_type vector<T, Allocator>::size() const
-    noexcept {
-  return end_ - begin_;
+template <class... Args>
+inline typename vector<T, Allocator>::reference vector<T, Allocator>::emplace_back(Args&&... args) {
+  if (this->end_ < this->cap_) {
+    alloc_traits_::construct(this->alloc_, __to_raw_pointer(this->end_), std::forward(args...));
+    ++this->end_;
+  } else {
+
+  }
+  return this->back();
 }
+
 
 STL_END
 
