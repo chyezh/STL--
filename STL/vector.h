@@ -382,6 +382,9 @@ class vector : private __vector_base<T, Allocator> {
     emplace_back(std::forward<Arg>(arg));
   }
 
+  // move if noexcept or copy old element to swap buffer and then swap the buffer
+  void swap_out_buffer_(__split_buffer<value_type, allocator_type&>& swap_buffer);
+
   size_type default_realloc_strategy_(size_type new_size) const;
 };
 
@@ -460,12 +463,31 @@ vector<T, Allocator>::copy_construct_at_end_(ForwardIterator first,
   } while (++first != last);
 }
 
+// a emplace path when capacity is full
 template <class T, class Allocator>
 template <class... Args>
 void vector<T, Allocator>::emplace_back_when_capacity_is_full_(Args&&... args) {
+  // make a swap buffer to allocate new space
   __split_buffer<value_type, allocator_type&> swap_buffer(default_realloc_strategy_(size()+1), size(), this->alloc_);
+  // emplace new element at swap_buffer end()
   alloc_traits_::construct(this->alloc_, __to_raw_pointer(swap_buffer.end_), std::forward<Args>(args)...);
   ++swap_buffer.end_;
+  // move old element to the swap buffer and swap
+  swap_out_buffer_(swap_buffer);
+}
+
+// move if noexcept or copy old element to swap buffer and then swap the buffer
+template <class T, class Allocator>
+void vector<T, Allocator>::swap_out_buffer_(__split_buffer<value_type, allocator_type&>& swap_buffer) {
+  while(this->end_ != this->begin_) {
+    alloc_traits_::construct(this->alloc_, this->end_ - 1, swap_buffer.begin_);
+    --this->end_;
+    --swap_buffer.begin_;
+  }
+  swap(this->begin_, swap_buffer.begin_);
+  swap(this->end_, swap_buffer.end_);
+  swap(this->cap_, swap_buffer.cap_);
+  swap_buffer.storage_ = swap_buffer.begin_;
 }
 
 template <class T, class Allocator>
@@ -527,7 +549,10 @@ vector<T, Allocator>::vector(
             !__is_forward_iterator<InputIterator>::value &&
             is_constructible<value_type, typename iterator_traits<
                                              InputIterator>::reference>::value,
-        InputIterator>::type last) {}
+        InputIterator>::type last) {
+  while(first != last)
+    emplace_back_with_single_value_(*first++);
+}
 
 template <class T, class Allocator>
 template <class InputIterator>
@@ -539,7 +564,10 @@ vector<T, Allocator>::vector(
             is_constructible<value_type, typename iterator_traits<
                                              InputIterator>::reference>::value,
         InputIterator>::type last,
-    const allocator_type &alloc) {}
+    const allocator_type &alloc) {
+  while(first != last)
+    emplace_back_with_single_value_(*first++);    
+}
 
 // if range iterator is forward iterator
 template <class T, class Allocator>
@@ -650,9 +678,8 @@ inline typename vector<T, Allocator>::reference vector<T, Allocator>::emplace_ba
   if (this->end_ < this->cap_) {
     alloc_traits_::construct(this->alloc_, __to_raw_pointer(this->end_), std::forward(args...));
     ++this->end_;
-  } else {
-
-  }
+  } else
+    emplace_back_when_capacity_is_full_(std::forward<Args>(args)...);
   return this->back();
 }
 
