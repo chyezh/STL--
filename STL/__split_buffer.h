@@ -5,8 +5,8 @@
 
 STL_BEGIN
 
-// __split_buffer is used as a swap buffer for the container.
-// type Allocator might be reference.
+// __split_buffer is used as a swap buffer for the container
+// type Allocator might be reference
 template <class T, class Allocator = allocator<T>>
 struct __split_buffer {
  public:
@@ -23,10 +23,12 @@ struct __split_buffer {
   typedef typename alloc_traits_::difference_type difference_type;
   typedef typename alloc_traits_::pointer pointer;
   typedef typename alloc_traits_::const_pointer const_pointer;
-  
-  // default constructor.
+
+  // >>> constructor 
+  // default constructor
   __split_buffer() noexcept(std::is_nothrow_default_constructible<allocator_type>::value);
 
+  // copy constructor disabled
   __split_buffer(cosnt __split_buffer) = delete;
 
   explicit __split_buffer(const allocator_remove_reference_type_& alloc);
@@ -35,17 +37,23 @@ struct __split_buffer {
 
   __split_buffer(__split_buffer&& x) noexcept(std::is_nothrow_move_constructible<allocator_type>::value);
 
+  // >>> destructor
   ~__split_buffer();
 
+  // >>> assignment
+  // copy assignment disabled
   __split_buffer& operator=(const __split_buffer&) = delete;
 
-  // iterator
+  // >>> iterator
   iterator begin() noexcept { return begin_; }
+
   const_iterator begin() const noexcept { return begin_; }
+
   iterator end() noexcept { return end_; }
+
   const_iterator end() const noexcept { return end_; }
 
-  // size
+  // >>> capacity
   size_type size() const noexcept { return static_cast<size_type>(end_ - begin_); }
 
   bool empty() const noexcept { return end_ == begin_; }
@@ -56,7 +64,11 @@ struct __split_buffer {
 
   size_type back_spare_() const noexcept { return static_cast<size_type>(cap_ - end_); }
 
-  // access
+  void reserve(size_type n);
+
+  void shrink_to_fit() noexcept;
+
+  // >>> access
   reference front() { return *begin_; }
   
   const_reference front() const { return *begin_; }
@@ -65,11 +77,42 @@ struct __split_buffer {
 
   const_reference back() const { return *(end_ - 1); }
 
+  // >>> modifier
+  void push_front(const value_type& value);
+
+  void push_front(value_type&& value);
+
+  void push_back(const value_type& value);
+
+  void push_back(value_type&& value);
+
+  template <class... Args>
+  void emplace_back(Args... args);
+
+  void pop_front() { destruct_at_begin_(begin_ + 1); }
+
+  void pop_back() { destruct_at_end_(end_ - 1); }
+
   void clear() noexcept {
     destruct_at_end_(begin_);
   }
   
-  void destruct_at_end_(pointer new_begin) {
+  // >>> auxiliary function
+
+  void default_construct_at_end_(size_type n);
+
+  void copy_construct_at_end_(size_type n, const value_type& value);
+
+  template <class ForwardIterator>
+  typename enable_if<__is_forward_iterator<ForwardIterator>::value, void>::type
+  copy_construct_at_end_(ForwardIterator first, ForwardIterator last);
+
+  
+
+  void destruct_at_begin_(pointer new_begin) {
+  }
+
+  void destruct_at_end_(pointer new_end) {
         
   }
   

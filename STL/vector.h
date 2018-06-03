@@ -14,7 +14,7 @@ STL_BEGIN
 template <class T, class Allocator>
 class __vector_base {
  protected:
-  // typedef
+  // >>> member type
   typedef T value_type;
   typedef Allocator allocator_type;
   typedef allocator_traits<allocator_type> alloc_traits_;
@@ -30,6 +30,7 @@ class __vector_base {
   typedef std::reverse_iterator<const_iterator> const_reverse_iterator;
 
  protected:
+  // >>> constructor
   // default constructor
   __vector_base() noexcept(
       std::is_nothrow_default_constructible<allocator_type>::value)
@@ -42,7 +43,7 @@ class __vector_base {
   __vector_base(const allocator_type &alloc) noexcept
       : begin_(nullptr), end_(nullptr), cap_(nullptr), alloc_(alloc) {}
 
-  // destructor.
+  // >>> destructor.
   ~__vector_base() {
     // free the memory using allocator
     if (begin_ != nullptr) {
@@ -59,6 +60,7 @@ class __vector_base {
     return static_cast<size_type>(cap_ - begin_);
   }
 
+  // >>> auxiliary function for derived type
   // destroy every element from end to loc
   // noexcept because of allocator::destroy is noexcept
   void destroy_at_end_(pointer loc) noexcept {
@@ -86,7 +88,7 @@ class __vector_base {
   }
 
  private:
-  // auxiliary function
+  // >>> private auxiliary function
   // propagate_on_container_copy_assignment
   // allocator need to be copied when container is copy-assigned
   void copy_assign_alloc_(const __vector_base &x, true_type) {
@@ -114,6 +116,7 @@ class __vector_base {
   void move_assign_alloc_(const __vector_base &x, false_type) noexcept {}
 
  protected:
+  // >>> data member
   allocator_type alloc_;
   pointer begin_;
   pointer end_;
@@ -127,7 +130,7 @@ class vector : private __vector_base<T, Allocator> {
   typedef typename base_::alloc_traits_ alloc_traits_;
 
  public:
-  // typedef
+  // >>> member type
   typedef typename base_::value_type value_type;
   typedef typename base_::allocator_type allocator_type;
   typedef typename base_::reference reference;
@@ -142,6 +145,7 @@ class vector : private __vector_base<T, Allocator> {
   typedef typename base_::const_reverse_iterator const_reverse_iterator;
 
  public:
+  // >>> constructor
   // default constructor
   vector() noexcept(
       std::is_nothrow_default_constructible<allocator_type>::value) {}
@@ -220,7 +224,7 @@ class vector : private __vector_base<T, Allocator> {
 
   vector(std::initializer_list<value_type> init, const allocator_type &alloc);
 
-  // deconstructor
+  // >>> deconstructor
   ~vector() {}
 
   // assignment operator
@@ -229,14 +233,15 @@ class vector : private __vector_base<T, Allocator> {
       alloc_traits_::propagate_on_container_move_assignment::value ||
       alloc_traits_::is_always_equal::value);
   vector &operator=(std::initializer_list<value_type> init);
-
-  // member function
+  
   // assign
   void assign(size_type n, const value_type &value);
   void assign(std::initializer_list<value_type> init);
+  
   // allocator
   allocator_type get_allocator() const noexcept { return this->alloc_; }
-  // iterator
+  
+  // >>> iterator
   // plain iterator
   iterator begin() noexcept { return this->begin_; }
 
@@ -268,7 +273,7 @@ class vector : private __vector_base<T, Allocator> {
 
   const_reverse_iterator crend() const noexcept { return rend(); }
 
-  // size
+  // >>> capacity
   size_type size() const noexcept {
     return static_cast<size_type>(this->end_ - this->begin_);
   }
@@ -280,16 +285,22 @@ class vector : private __vector_base<T, Allocator> {
   bool empty() const noexcept { return this->begin_ == this->end_; }
 
   void resize(size_type n);
+
   void resize(size_type n, const value_type &value);
-  // capacity
+
   size_type capacity() const noexcept { return base_::capacity(); }
 
   void reserve(size_type n);
+  
   void shrink_to_fit() noexcept;
-  // access
+
+  // >>> element access
   reference operator[](size_type n);
+
   const_reference operator[](size_type n) const;
+  
   reference at(size_type n);
+  
   const_reference at(size_type n) const;
 
   reference front() {
@@ -318,17 +329,10 @@ class vector : private __vector_base<T, Allocator> {
     return __to_raw_pointer(this->begin_);
   }
 
-  // modifier
+  // >>> modifier
   // insert
   void push_back(const value_type &value);
   void push_back(value_type &&value);
-
-  // emplace
-  template <class... Args>
-  reference emplace_back(Args &&... args);
-  
-  template <class... Args>
-  iterator emplace(const_iterator position, Args &&... args);
   iterator insert(const_iterator position, const value_type &value);
   iterator insert(const_iterator position, value_type &&value);
   iterator insert(const_iterator position, size_type n,
@@ -338,7 +342,15 @@ class vector : private __vector_base<T, Allocator> {
                   InputIterator last);
   iterator insert(const_iterator position,
                   std::initializer_list<value_type> init);
-  // remove
+
+  // emplace
+  template <class... Args>
+  reference emplace_back(Args &&... args);
+  
+  template <class... Args>
+  iterator emplace(const_iterator position, Args &&... args);
+  
+  /* remove */
   iterator erase(const_iterator position);
   iterator erase(const_iterator first, const_iterator last);
   void pop_back();
@@ -350,6 +362,7 @@ class vector : private __vector_base<T, Allocator> {
       alloc_traits_::is_always_equal::value);
 
  private:
+  // >>> private auxiliary function
   // throw length error
   void throw_length_error_() { throw std::length_error("vector"); }
 
