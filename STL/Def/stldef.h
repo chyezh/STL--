@@ -10,22 +10,14 @@
 
 STL_BEGIN
 
-/* using some utilities of namespace std */
-// default allocator
-template <class T>
-using allocator = std::allocator<T>;
-
-template <class Allocator>
-using allocator_traits = std::allocator_traits<Allocator>;
-
-// iterator category tag.
+// >>> iterator category tag.
 using std::input_iterator_tag;
 using std::output_iterator_tag;
 using std::forward_iterator_tag;
 using std::bidirectional_iterator_tag;
 using std::random_access_iterator_tag;
 
-// type traits
+// >>> type traits
 template <class T, T v>
 using integral_constant = std::integral_constant<T, v>;
 using std::true_type;
@@ -49,7 +41,29 @@ using is_convertible = std::is_convertible<T, U>;
 template <class T, class... Args>
 using is_constructible = std::is_constructible<T, Args...>;
 
-// change pointer type to raw pointer
+/* using some utilities of namespace std */
+// default allocator
+template <class T>
+using allocator = std::allocator<T>;
+
+template <class Allocator>
+using allocator_traits = std::allocator_traits<Allocator>;
+
+// swap allocator
+template <class Allocator>
+void __swap_allocator(Allocator alloc1, Allocator alloc2) {
+  __swap_allocator(alloc1, alloc2, intergral_constant<bool, allocator_traits<Allocator>::propagate_on_container_swap::value>());
+}
+
+template <class Allocator>
+void __swap_allocator(Allocator alloc1, Allocator alloc2, true_type) noexcept {
+  std::swap(alloc1, alloc2);
+}
+
+template <class Allocator>
+void __swap_allocator(Allocator alloc1, Allocator alloc2, false_type) noexcept {}
+
+// change like pointer type to raw pointer
 template <class T>
 inline T* __to_raw_pointer(T* pointer) noexcept { return pointer; }
 
@@ -95,6 +109,7 @@ struct __is_bidirectional_iterator
 template <class T>
 struct __is_random_access_iterator 
   : public __has_iterator_category_convertible_to<T, random_access_iterator_tag> {};
+
 
 STL_END
 
