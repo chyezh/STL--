@@ -15,8 +15,8 @@ struct __split_buffer {
   typedef Allocator allocator_type;
   typedef typename std::remove_reference<allocator_type>::type allocator_remove_reference_type_;
   typedef allocator_traits<allocator_remove_reference_type_> alloc_traits_;
-  typedef typename alloc_traits_::reference reference;
-  typedef typename alloc_traits_::const_reference const_reference;
+  typedef value_type& reference;
+  typedef const value_type& const_reference;
   typedef typename alloc_traits_::pointer iterator;
   typedef typename alloc_traits_::const_pointer const_iterator;
   typedef typename alloc_traits_::size_type size_type;
@@ -29,15 +29,15 @@ struct __split_buffer {
   __split_buffer() noexcept(std::is_nothrow_default_constructible<allocator_type>::value);
 
   // copy constructor disabled
-  __split_buffer(cosnt __split_buffer) = delete;
+  __split_buffer(const __split_buffer&) = delete;
 
-  explicit __split_buffer(const allocator_remove_reference_type_& alloc);
+  explicit __split_buffer(allocator_remove_reference_type_& alloc);
 
-  explicit __split_buffer(size_type cap, size_type start, const allocator_remove_reference_type_& alloc);
+  explicit __split_buffer(size_type cap, size_type start, allocator_remove_reference_type_& alloc);
 
   __split_buffer(__split_buffer&& x) noexcept(std::is_nothrow_move_constructible<allocator_type>::value);
   
-  __split_buffer(__split_buffer&& x, const allocator_remove_reference_type_& alloc);
+  __split_buffer(__split_buffer&& x, allocator_remove_reference_type_& alloc);
 
   // >>> destructor
   ~__split_buffer();
@@ -46,7 +46,7 @@ struct __split_buffer {
   // copy assignment disabled
   __split_buffer& operator=(const __split_buffer&) = delete;
 
-  --split_buffer operator=(__split_buffer&& x);
+  __split_buffer operator=(__split_buffer&& x);
 
   // >>> iterator
   iterator begin() noexcept { return begin_; }
@@ -101,7 +101,8 @@ struct __split_buffer {
     destruct_at_end_(begin_);
   }
 
-  void swap(__split_buffer& x) noexcept(!alloc_traits_::propagate_on_container_swap || std::is_nothrow_swapable<allocator_remove_reference_type_>::value);
+  void swap(__split_buffer& x) noexcept(!alloc_traits_::propagate_on_container_swap::value 
+  /* || std::is_nothrow_swappable<allocator_remove_reference_type_>::value */);
 
   // >>> auxiliary function
 
@@ -199,17 +200,17 @@ void __split_buffer<T, Allocator>::destruct_at_end_(pointer new_end) noexcept {
 // default constructor
 // compile error if Allocator is reference type
 template <class T, class Allocator>
-__split_buffer<T, Allocator>::__split_buffer() 
+__split_buffer<T, Allocator>::__split_buffer() noexcept(std::is_nothrow_default_constructible<allocator_type>::value)
   : storage_(nullptr),
     begin_(nullptr),
     end_(nullptr),
-    cap_(nullptr)
+    cap_(nullptr),
     alloc_(allocator_type()) {}
 
 template <class T, class Allocator>
 __split_buffer<T, Allocator>::__split_buffer(size_type cap, 
   size_type start, 
-  const allocator_remove_reference_type& alloc) 
+  allocator_remove_reference_type_& alloc) 
   : alloc_(alloc) {
   storage_ = cap != 0 ? alloc_traits_::allocate(alloc_, cap) : nullptr;
   begin_ = end_ = storage_ + start;
@@ -217,7 +218,7 @@ __split_buffer<T, Allocator>::__split_buffer(size_type cap,
 }
 
 template <class T, class Allocator>
-__split_buffer<T, Allocator>::__split_buffer(const  allocator_remove_reference_type_& alloc)
+__split_buffer<T, Allocator>::__split_buffer(allocator_remove_reference_type_& alloc)
   : storage_(nullptr),
     begin_(nullptr),
     end_(nullptr),
@@ -236,7 +237,7 @@ __split_buffer<T, Allocator>::__split_buffer(__split_buffer&& x)
 }
 
 template <class T, class Allocator>
-__split_buffer<T, Allocator>::__split_buffer(__split_buffer&& x, const allocator_remove_reference_type_& alloc)
+__split_buffer<T, Allocator>::__split_buffer(__split_buffer&& x, allocator_remove_reference_type_& alloc)
   : storage_(nullptr),
     begin_(nullptr),
     end_(nullptr),
@@ -263,20 +264,49 @@ __split_buffer<T, Allocator>::__split_buffer(__split_buffer&& x, const allocator
 template <class T, class Allocator>
 __split_buffer<T, Allocator>::~__split_buffer() {
   clear();
-  if(this->storage_ != nullptr)
+  if (this->storage_ != nullptr)
     alloc_traits_::deallocate(this->alloc_, this->storage_, capacity());
 }
 
 template <class T, class Allocator>
-__split_buffer<T, Allocator>::swap(__split_buffer& x) 
-  noexcept(!alloc_traits_::propagate_on_container_swap ||
-           std::is_nothrow_swapable<allocator_remove_reference_type_>::value) {
+void __split_buffer<T, Allocator>::swap(__split_buffer& x) 
+  noexcept(!alloc_traits_::propagate_on_container_swap::value 
+   /* || std::is_nothrow_swappable<allocator_remove_reference_type_>::value */) {
   std::swap(this->storage_, x.storage_);
   std::swap(this->begin_, x.begin_);
   std::swap(this->end_, x.end_);
   std::swap(this->cap_, x.cap_);
   __swap_allocator(this->alloc_, x.alloc_);
 }
+
+template <class T, class Allocator>
+void __split_buffer<T, Allocator>::reserve(size_type n) {
+  // allocate new space if n > capacity(), do nothing else
+  if (n > capacity()) {
+    __split_buffer<value_type, allocator_remove_reference_type_&> temp_buffer(n, front_spare_(), this->alloc_);
+    iterator first = this->begin_;
+    iterator last = this->end_;
+    while (first != last)
+      temp_buffer.copy_construct_at_end_(1, std::move_if_noexcept(*first++));
+    swap(temp_buffer);
+  }
+}
+
+template <class T, class Allocator>
+void __split_buffer<T, Allocator>::shrink_to_fit() noexcept {
+  if (capacity() > size()) {
+    // noexcept
+    try {
+      __split_buffer<value_type, allocator_remove_reference_type_&> temp_buffer(size(), 0, this->alloc_);
+      iterator first = this->begin_;
+      iterator last = this->end_;
+      while (first != last)
+        temp_buffer.copy_construct_at_end_(1, std::move_if_noexcept(*first++));
+      swap(temp_buffer);
+    } catch(...) {}
+  }
+}
+
 
 STL_END
 

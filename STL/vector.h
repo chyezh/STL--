@@ -18,8 +18,8 @@ class __vector_base {
   typedef T value_type;
   typedef Allocator allocator_type;
   typedef allocator_traits<allocator_type> alloc_traits_;
-  typedef typename alloc_traits_::reference reference;
-  typedef typename alloc_traits_::const_reference const_reference;
+  typedef value_type& reference;
+  typedef const value_type& const_reference;
   typedef typename alloc_traits_::pointer iterator;
   typedef typename alloc_traits_::const_pointer const_iterator;
   typedef typename alloc_traits_::size_type size_type;
@@ -493,7 +493,7 @@ void vector<T, Allocator>::emplace_back_when_capacity_is_full_(Args&&... args) {
 template <class T, class Allocator>
 void vector<T, Allocator>::swap_out_buffer_(__split_buffer<value_type, allocator_type&>& swap_buffer) {
   while(this->end_ != this->begin_) {
-    alloc_traits_::construct(this->alloc_, this->end_ - 1, swap_buffer.begin_);
+    alloc_traits_::construct(this->alloc_, __to_raw_pointer(swap_buffer.begin_), std::move_if_noexcept(*(this->end_-1));
     --this->end_;
     --swap_buffer.begin_;
   }

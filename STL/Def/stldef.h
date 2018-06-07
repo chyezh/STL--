@@ -20,7 +20,9 @@ using std::random_access_iterator_tag;
 // >>> type traits
 template <class T, T v>
 using integral_constant = std::integral_constant<T, v>;
+
 using std::true_type;
+
 using std::false_type;
 
 template <class ...>
@@ -51,17 +53,17 @@ using allocator_traits = std::allocator_traits<Allocator>;
 
 // swap allocator
 template <class Allocator>
-void __swap_allocator(Allocator alloc1, Allocator alloc2) {
-  __swap_allocator(alloc1, alloc2, intergral_constant<bool, allocator_traits<Allocator>::propagate_on_container_swap::value>());
-}
-
-template <class Allocator>
 void __swap_allocator(Allocator alloc1, Allocator alloc2, true_type) noexcept {
   std::swap(alloc1, alloc2);
 }
 
 template <class Allocator>
 void __swap_allocator(Allocator alloc1, Allocator alloc2, false_type) noexcept {}
+
+template <class Allocator>
+void __swap_allocator(Allocator alloc1, Allocator alloc2) {
+  __swap_allocator(alloc1, alloc2, integral_constant<bool, allocator_traits<Allocator>::propagate_on_container_swap::value>());
+}
 
 // change like pointer type to raw pointer
 template <class T>
