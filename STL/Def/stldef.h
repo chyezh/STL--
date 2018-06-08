@@ -1,9 +1,9 @@
 #ifndef _STLDEF_H__
 #define _STLDEF_H__
 
+#include <iterator>
 #include <memory>
 #include <type_traits>
-#include <iterator>
 
 #define STL_BEGIN namespace stl {
 #define STL_END }
@@ -11,10 +11,10 @@
 STL_BEGIN
 
 // >>> iterator category tag.
+using std::bidirectional_iterator_tag;
+using std::forward_iterator_tag;
 using std::input_iterator_tag;
 using std::output_iterator_tag;
-using std::forward_iterator_tag;
-using std::bidirectional_iterator_tag;
 using std::random_access_iterator_tag;
 
 // >>> type traits
@@ -25,7 +25,7 @@ using std::true_type;
 
 using std::false_type;
 
-template <class ...>
+template <class...>
 using void_t = void;
 
 template <bool B, class T>
@@ -58,20 +58,28 @@ void __swap_allocator(Allocator alloc1, Allocator alloc2, true_type) noexcept {
 }
 
 template <class Allocator>
-void __swap_allocator(Allocator alloc1, Allocator alloc2, false_type) noexcept {}
+void __swap_allocator(Allocator alloc1, Allocator alloc2, false_type) noexcept {
+}
 
 template <class Allocator>
 void __swap_allocator(Allocator alloc1, Allocator alloc2) {
-  __swap_allocator(alloc1, alloc2, integral_constant<bool, allocator_traits<Allocator>::propagate_on_container_swap::value>());
+  __swap_allocator(
+      alloc1, alloc2,
+      integral_constant<
+          bool,
+          allocator_traits<Allocator>::propagate_on_container_swap::value>());
 }
 
 // change like pointer type to raw pointer
 template <class T>
-inline T* __to_raw_pointer(T* pointer) noexcept { return pointer; }
+inline T *__to_raw_pointer(T *pointer) noexcept {
+  return pointer;
+}
 
 template <class Pointer>
-inline typename pointer_traits<Pointer>::element_type* __to_raw_pointer(Pointer pointer) noexcept {
-    return __to_raw_pointer(pointer.operator->());
+inline typename pointer_traits<Pointer>::element_type *__to_raw_pointer(
+    Pointer pointer) noexcept {
+  return __to_raw_pointer(pointer.operator->());
 }
 
 /* iterator category judgement */
@@ -80,39 +88,44 @@ template <class T, class = void_t<>>
 struct __has_iterator_category_tag : false_type {};
 
 template <class T>
-struct __has_iterator_category_tag<T, void_t<typename T::iterator_category>> : true_type {};
+struct __has_iterator_category_tag<T, void_t<typename T::iterator_category>>
+    : true_type {};
 
 // whether type T is convertible to type U
-template <class T, class U, bool = __has_iterator_category_tag<iterator_traits<T>>::value>
-struct __has_iterator_category_convertible_to 
-  : public integral_constant<bool, is_convertible<typename iterator_traits<T>::iterator_category, U>::value> {};
+template <class T, class U,
+          bool = __has_iterator_category_tag<iterator_traits<T>>::value>
+struct __has_iterator_category_convertible_to
+    : public integral_constant<
+          bool, is_convertible<typename iterator_traits<T>::iterator_category,
+                               U>::value> {};
 
 template <class T, class U>
-struct __has_iterator_category_convertible_to<T, U, false>
-  : public false_type {};
+struct __has_iterator_category_convertible_to<T, U, false> : public false_type {
+};
 
 // judge T's iterator_category.
 template <class T>
-struct __is_input_iterator 
-  : public __has_iterator_category_convertible_to<T, input_iterator_tag> {};
+struct __is_input_iterator
+    : public __has_iterator_category_convertible_to<T, input_iterator_tag> {};
 
 template <class T>
-struct __is_output_iterator 
-  : public __has_iterator_category_convertible_to<T, output_iterator_tag> {};
+struct __is_output_iterator
+    : public __has_iterator_category_convertible_to<T, output_iterator_tag> {};
 
 template <class T>
-struct __is_forward_iterator 
-  : public __has_iterator_category_convertible_to<T, forward_iterator_tag> {};
+struct __is_forward_iterator
+    : public __has_iterator_category_convertible_to<T, forward_iterator_tag> {};
 
 template <class T>
-struct __is_bidirectional_iterator 
-  : public __has_iterator_category_convertible_to<T, bidirectional_iterator_tag> {};
+struct __is_bidirectional_iterator
+    : public __has_iterator_category_convertible_to<
+          T, bidirectional_iterator_tag> {};
 
 template <class T>
-struct __is_random_access_iterator 
-  : public __has_iterator_category_convertible_to<T, random_access_iterator_tag> {};
-
+struct __is_random_access_iterator
+    : public __has_iterator_category_convertible_to<
+          T, random_access_iterator_tag> {};
 
 STL_END
 
-#endif // !_STLDEF_H__
+#endif  // !_STLDEF_H__
