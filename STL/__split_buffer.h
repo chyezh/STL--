@@ -6,6 +6,8 @@
 STL_BEGIN
 
 // __split_buffer is used as a swap buffer for the container
+// __split_buffer is a auxiliary container for other standard container
+// so the most operation of __split_buffer is not safe, do not use it directly
 // type Allocator might be reference
 template <class T, class Allocator = allocator<T>>
 struct __split_buffer {
@@ -50,7 +52,7 @@ struct __split_buffer {
   // copy assignment disabled
   __split_buffer &operator=(const __split_buffer &) = delete;
 
-  __split_buffer operator=(__split_buffer &&x);
+  __split_buffer &operator=(__split_buffer &&x) noexcept;
 
   // >>> iterator
   iterator begin() noexcept { return begin_; }
@@ -131,9 +133,7 @@ struct __split_buffer {
   void destruct_at_end_(pointer new_end) noexcept;
 
  private:
-  void move_assign_alloc_(__split_buffer &x, true_type) noexcept(
-      std::is_nothrow_move_assignable<
-          allocator_remove_reference_type_>::value) {
+  void move_assign_alloc_(__split_buffer &x, true_type) noexcept {
     alloc_ = std::move(x.alloc_);
   }
 
@@ -289,6 +289,20 @@ __split_buffer<T, Allocator>::~__split_buffer() {
 }
 
 template <class T, class Allocator>
+__split_buffer<T, Allocator>& __split_buffer<T, Allocator>::operator=(__split_buffer&& x) noexcept {
+  clear();
+  shrink_to_fit();
+  this->storage_ = x.storage_;
+  this->begin_ = x.begin_;
+  this->end_ = x.end_;
+  this->cap_ = x.cap_;
+  move_assign_alloc_(x, integral_constant<bool, alloc_traits_::propagate_on_container_move_assignment::value>());
+  x.storage_ = x.begin_ = x.end_ = x.cap_ = nullptr;
+  return *this;
+}
+
+
+template <class T, class Allocator>
 void __split_buffer<T, Allocator>::swap(__split_buffer &x) noexcept(!alloc_traits_::propagate_on_container_swap::value
                                                                     /* || std::is_nothrow_swappable<allocator_remove_reference_type_>::value */)
 {
@@ -333,7 +347,7 @@ void __split_buffer<T, Allocator>::shrink_to_fit() noexcept {
 template <class T, class Allocator>
 void __split_buffer<T, Allocator>::push_front(const value_type &x) {
   if (this->begin_ == this->storage_) {
-    if (this->end_ > this->cap_) {
+    if (this->end_ < this->cap_) {
       // adjust buffer if back_spare_() != 0
       difference_type move_step = back_spare_();
       // at lease move 1 element
@@ -344,10 +358,8 @@ void __split_buffer<T, Allocator>::push_front(const value_type &x) {
       size_type new_cap = std::max<size_type>(2 * static_cast<size_type>(capacity()),1);
       // front_sparse() of new temp at least 1
       __split_buffer<value_type, allocator_remove_reference_type_ &> temp_buffer(new_cap, (new_cap + 3) / 4, this->alloc_);
-      iterator first = this->begin_;
-      iterator last = this->end_;
-      while(first != last)
-        temp_buffer.copy_construct_at_end_(1, std::move_if_noexcept(*first++));
+      temp_buffer.copy_construct_at_end_(std::move_iterator<iterator>(this->begin_), 
+                                         std::move_iterator<iterator>(this->end_));
       swap(temp_buffer);
     }
   }
@@ -359,7 +371,7 @@ void __split_buffer<T, Allocator>::push_front(const value_type &x) {
 template <class T, class Allocator>
 void __split_buffer<T, Allocator>::push_front(value_type &&x) {
   if (this->begin_ == this->storage_) {
-    if (this->end_ > this->cap_) {
+    if (this->end_ < this->cap_) {
       // adjust buffer if back_spare_() != 0
       difference_type move_step = back_spare_();
       // at lease move 1 element
@@ -370,10 +382,8 @@ void __split_buffer<T, Allocator>::push_front(value_type &&x) {
       size_type new_cap = std::max<size_type>(2 * static_cast<size_type>(capacity()),1);
       // front_sparse() of new temp at least 1
       __split_buffer<value_type, allocator_remove_reference_type_ &> temp_buffer(new_cap, (new_cap + 3) / 4, this->alloc_);
-      iterator first = this->begin_;
-      iterator last = this->end_;
-      while(first != last)
-        temp_buffer.copy_construct_at_end_(1, std::move_if_noexcept(*first++));
+      temp_buffer.copy_construct_at_end_(std::move_iterator<iterator>(this->begin_), 
+                                         std::move_iterator<iterator>(this->end_));
       swap(temp_buffer);
     }
   }
@@ -384,12 +394,63 @@ void __split_buffer<T, Allocator>::push_front(value_type &&x) {
 
 template <class T, class Allocator>
 void __split_buffer<T, Allocator>::push_back(const value_type &x) {
-  
+  if (this->end_ == this->cap_) {
+    if (this->begin_ > this->storage_) {
+      difference_type move_step = this->front_spare_();
+      move_step = (move_step + 1) / 2;
+      this->end_ = std::move(this->begin_, this->end_, this->begin_ - move_step);
+      this->begin_ -= move_step;
+    } else {
+      size_type new_cap = std::max<size_type>(2 * static_cast<size_type>(capacity()), 1);
+      __split_buffer<value_type, allocator_remove_reference_type_ &> temp_buffer(new_cap, new_cap / 4, this->alloc_);
+      temp_buffer.copy_construct_at_end_(std::move_iterator<iterator>(this->begin_), 
+                                         std::move_iterator<iterator>(this->end_));
+      swap(temp_buffer);
+    }
+  }
+  alloc_traits_::construct(this->alloc_, __to_raw_pointer(this->end_), x);
+  ++this->end_;
 }
 
 template <class T, class Allocator>
 void __split_buffer<T, Allocator>::push_back(value_type &&x) {
+  if (this->end_ == this->cap_) {
+    if (this->begin_ > this->storage_) {
+      difference_type move_step = this->front_spare_();
+      move_step = (move_step + 1) / 2;
+      this->end_ = std::move(this->begin_, this->end_, this->begin_ - move_step);
+      this->begin_ -= move_step;
+    } else {
+      size_type new_cap = std::max<size_type>(2 * static_cast<size_type>(capacity()), 1);
+      __split_buffer<value_type, allocator_remove_reference_type_ &> temp_buffer(new_cap, new_cap / 4, this->alloc_);
+      temp_buffer.copy_construct_at_end_(std::move_iterator<iterator>(this->begin_), 
+                                         std::move_iterator<iterator>(this->end_));
+      swap(temp_buffer);
+    }
+  }
+  alloc_traits_::construct(this->alloc_, __to_raw_pointer(this->end_), std::move(x));
+  ++this->end_;
+}
 
+template <class T, class Allocator>
+template <class... Args>
+void __split_buffer<T, Allocator>::emplace_back(Args... args) {
+  if (this->end_ == this->cap_) {
+    if (this->begin_ > this->storage_) {
+      difference_type move_step = this->front_spare_();
+      move_step = (move_step + 1) / 2;
+      this->end_ = std::move(this->begin_, this->end_, this->begin_ - move_step);
+      this->begin_ -= move_step;
+    } else {
+      size_type new_cap = std::max<size_type>(2 * static_cast<size_type>(capacity()), 1);
+      __split_buffer<value_type, allocator_remove_reference_type_ &> temp_buffer(new_cap, new_cap / 4, this->alloc_);
+      temp_buffer.copy_construct_at_end_(std::move_iterator<iterator>(this->begin_), 
+                                         std::move_iterator<iterator>(this->end_));
+      swap(temp_buffer);
+    }
+  }
+  alloc_traits_::construct(this->alloc_, __to_raw_pointer(this->end_), std::forward<Args>(args)...);
+  ++this->end_;
 }
 
 STL_END
