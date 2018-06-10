@@ -65,7 +65,7 @@ class __vector_base {
   // noexcept because of allocator::destroy is noexcept
   void destroy_at_end_(pointer loc) noexcept {
     pointer end_now = end_;
-    while (loc != end_now) alloc_traits_::destroy(alloc_, --end_now);
+    while (loc != end_now) alloc_traits_::destroy(alloc_, __to_raw_pointer(--end_now));
     end_ = loc;
   }
 
@@ -380,7 +380,7 @@ class vector : private __vector_base<T, Allocator> {
   template <class... Args>
   iterator emplace(const_iterator position, Args &&... args);
 
-  /* remove */
+  // remove
   iterator erase(const_iterator position);
   iterator erase(const_iterator first, const_iterator last);
   void pop_back();
@@ -417,6 +417,12 @@ class vector : private __vector_base<T, Allocator> {
   typename enable_if<__is_forward_iterator<ForwardIterator>::value, void>::type
   copy_construct_at_end_(ForwardIterator first, ForwardIterator last);
 
+  // default append n element, may reallocate new space
+  void default_append_(size_type n);
+
+  // copy append n element with value, may reallocate new space
+  void copy_append_(size_type n, const_reference value);
+
   // move-assignment when alloc_traits_::propagate_on_container_move_assignment
   // is true
   void move_assign_(vector &x, true_type) noexcept(
@@ -445,7 +451,7 @@ class vector : private __vector_base<T, Allocator> {
   size_type default_realloc_strategy_(size_type new_size) const;
 };
 
-/* the implementation of vector private auxiliary function */
+// >>> private auxiliary function
 
 // allocates n sapce for element
 // throws length error if n > max_size()
@@ -520,6 +526,26 @@ vector<T, Allocator>::copy_construct_at_end_(ForwardIterator first,
   } while (++first != last);
 }
 
+// default append n element, may reallocate new space
+template <class T, class Allocator>
+void vector<T, Allocator>::default_append_(size_type n) {
+  if (n >= static_cast<size_type>(capacity() - size_type())) {
+    __split_buffer<value_type, allocator_type &> swap_buffer(default_realloc_strategy_(capacity()+1), size(), this->alloc_);
+    swap_out_buffer_(swap_buffer);
+  }
+  default_construct_at_end_(n);
+}
+
+// copy append n element with value, may reallocate new space
+template <class T, class Allocator>
+void vector<T, Allocator>::copy_append_(size_type n, const_reference value) {
+  if (n >= static_cast<size_type>(capacity() - size_type())) {
+    __split_buffer<value_type, allocator_type &> swap_buffer(default_realloc_strategy_(capacity()+1), size(), this->alloc_);
+    swap_out_buffer_(swap_buffer);
+  }
+  copy_construct_at_end_(n, value);
+}
+
 // move-assignment when alloc_traits_::propagate_on_container_move_assignment is
 // true
 template <class T, class Allocator>
@@ -585,7 +611,7 @@ vector<T, Allocator>::default_realloc_strategy_(size_type new_size) const {
   return std::max<size_type>(2 * cap_now, new_size);
 }
 
-// >>> the implementation of vector constructor
+// >>> vector constructor
 
 template <class T, class Allocator>
 vector<T, Allocator>::vector(size_type n) {
@@ -838,29 +864,44 @@ void vector<T, Allocator>::assign(
   }
 }
 
-// >>> size
+// >>> capacity operation
 
 template <class T, class Allocator>
 void vector<T, Allocator>::resize(size_type n) {
-
+  if(n > size())
+    default_append_(n - size());
+  else
+    destroy_at_end_(this->begin_ + n);
 }
 
 template <class T, class Allocator>
 void vector<T, Allocator>::resize(size_type n, const value_type &value) {
-
+  if(n > size())
+    copy_append_(n - size(), value);
+  else
+    destroy_at_end_(this->begin_ + n);
 }
 
 template <class T, class Allocator>
 void vector<T, Allocator>::reserve(size_type n) {
-  ;
+  if(n > capacity()) {
+    __split_buffer<value_type, allocator_type &> swap_buffer(n, size(), this->alloc_);
+    swap_out_buffer_(swap_buffer);
+  }
 }
 
 template <class T, class Allocator>
 void vector<T, Allocator>::shrink_to_fit() noexcept {
-  
+  if(capacity() > size()) {
+    try {
+      __split_buffer<value_type, allocator_type &> swap_buffer(size(), size(), this->alloc_);
+      swap_out_buffer_(swap_buffer); 
+    } catch(...) {
+    }
+  }
 }
 
-// >>> access
+// >>> access operation
 
 // access element of subscript n without bound check
 template <class T, class Allocator>
@@ -894,6 +935,42 @@ typename vector<T, Allocator>::const_reference vector<T, Allcator>::at(
 // >>> insert operation
 
 template <class T, class Allocator>
+void vector<T, Allocator>::push_back(const value_type &value) {
+
+}
+
+template <class T, class Allocator>
+void vector<T, Allocator>::push_back(value_type &&value) {
+
+}
+
+template <class T, class Allocator>
+typename vector<T, Allocator>::iterator vector<T,Allocator>::insert(const_iterator position, const value_type &value) {
+
+}
+template <class T, class Allocator>
+typename vector<T, Allocator>::iterator vector<T, Allocator>::insert(const_iterator position, value_type &&value) {
+
+}
+template <class T, class Allocator>
+typename vector<T, Allocator>::iterator vector<T, Allocator>::insert(const_iterator position, size_type n,
+                  const value_type &value) {
+
+                  }
+template <class T, class Allocator>
+template <class InputIterator>
+typename vector<T, Allocator>::iterator vector<T, Allocator>::insert(const_iterator position, InputIterator first,
+                  InputIterator last) {
+
+                  }
+
+template <class T, class Allocator>
+typename vector<T, Allocator>::iterator vector<T, Allocator>::insert(const_iterator position,
+                  std::initializer_list<value_type> init) {
+
+                  }
+
+template <class T, class Allocator>
 template <class... Args>
 inline typename vector<T, Allocator>::reference
 vector<T, Allocator>::emplace_back(Args &&... args) {
@@ -904,6 +981,36 @@ vector<T, Allocator>::emplace_back(Args &&... args) {
   } else
     emplace_back_when_capacity_is_full_(std::forward<Args>(args)...);
   return this->back();
+}
+
+template <class T, class Allocator>
+template <class... Args>
+typename vector<T, Allocator>::iterator vector<T, Allocator>::emplace(const_iterator position, Args &&... args) {
+
+}
+
+  // remove
+
+template <class T, class Allocator>
+typename vector<T, Allocator>::iterator vector<T, Allocator>::erase(const_iterator position) {
+
+}
+
+template <class T, class Allocator>
+typename vector<T, Allocator>::iterator vector<T, Allocator>::erase(const_iterator first, const_iterator last) {
+
+}
+
+template <class T, class Allocator>
+void vector<T, Allocator>::pop_back() {
+
+}
+
+template <class T, class Allocator>
+void vector<T, Allocator>::swap(vector &) noexcept(
+    alloc_traits_::propagate_on_container_swap::value ||
+    alloc_traits_::is_always_equal::value) {
+
 }
 
 STL_END
