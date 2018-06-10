@@ -362,7 +362,9 @@ class vector : private __vector_base<T, Allocator> {
   // >>> modifier
   // insert
   void push_back(const value_type &value);
+
   void push_back(value_type &&value);
+  
   iterator insert(const_iterator position, const value_type &value);
   iterator insert(const_iterator position, value_type &&value);
   iterator insert(const_iterator position, size_type n,
@@ -447,6 +449,10 @@ class vector : private __vector_base<T, Allocator> {
   // buffer
   void swap_out_buffer_(
       __split_buffer<value_type, allocator_type &> &swap_buffer);
+
+  // slice old element into two part by loc
+  // move if noexcept or copy old element to swap buffer and then swap the buffer
+  pointer swap_out_buffer_(__split_buffer<value_type, allocator_type &> &swap_buffer, pointer loc);
 
   size_type default_realloc_strategy_(size_type new_size) const;
 };
@@ -591,9 +597,30 @@ template <class T, class Allocator>
 void vector<T, Allocator>::swap_out_buffer_(
     __split_buffer<value_type, allocator_type &> &swap_buffer) {
   while (this->end_ != this->begin_) {
-    alloc_traits_::construct(this->alloc_, __to_raw_pointer(swap_buffer.begin_), std::move_if_noexcept(*(this->end_-1));
+    alloc_traits_::construct(this->alloc_, __to_raw_pointer(swap_buffer.begin_ - 1), std::move_if_noexcept(*(this->end_ - 1));
     --this->end_;
     --swap_buffer.begin_;
+  }
+  swap(this->begin_, swap_buffer.begin_);
+  swap(this->end_, swap_buffer.end_);
+  swap(this->cap_, swap_buffer.cap_);
+  swap_buffer.storage_ = swap_buffer.begin_;
+}
+
+// slice old element into two part by loc
+// move if noexcept or copy old element to swap buffer and then swap the buffer
+template <class T, class Allocator>
+void vector<T, Allocator>::swap_out_buffer_(__split_buffer<value_type, allocator_type &> &swap_buffer, pointer loc) {
+  pointer temp_loc = loc;
+  while (temp_loc != this->begin_) {
+    alloc_traits_::construct(this->alloc_, __to_raw_pointer(swap_buffer.begin_ - 1), std::move_if_noexcept(*(temp_loc - 1)));
+    --temp_loc;
+    --swap_buffer.begin_;
+  }
+  while(loc != this->end_) {
+    alloc_traits_::construct(this->alloc_, __to_raw_pointer(swap_buffer.end_), std::move_if_noexcept(*loc));
+    ++loc;
+    ++swap_buffer.end_;
   }
   swap(this->begin_, swap_buffer.begin_);
   swap(this->end_, swap_buffer.end_);
@@ -893,6 +920,7 @@ void vector<T, Allocator>::reserve(size_type n) {
 template <class T, class Allocator>
 void vector<T, Allocator>::shrink_to_fit() noexcept {
   if(capacity() > size()) {
+    // noexcept
     try {
       __split_buffer<value_type, allocator_type &> swap_buffer(size(), size(), this->alloc_);
       swap_out_buffer_(swap_buffer); 
@@ -936,17 +964,36 @@ typename vector<T, Allocator>::const_reference vector<T, Allcator>::at(
 
 template <class T, class Allocator>
 void vector<T, Allocator>::push_back(const value_type &value) {
-
+  if (this->end_ < this->cap_) {
+    alloc_traits_::construct(this->alloc_, __to_raw_pointer(this->end_), value);
+    ++this->end_;
+  } else
+    emplace_back_when_capacity_is_full_(value);
 }
 
 template <class T, class Allocator>
 void vector<T, Allocator>::push_back(value_type &&value) {
-
+  if (this->end_ < this->cap_) {
+    alloc_traits_::construct(this->alloc_, __to_raw_pointer(this->end_), std::move(value));
+    ++this->end_
+  } else
+    emplace_back_when_capacity_is_full_(std::move(value));
 }
 
 template <class T, class Allocator>
 typename vector<T, Allocator>::iterator vector<T,Allocator>::insert(const_iterator position, const value_type &value) {
-
+  iterator new_pos = position;
+  if (this->end_ < this->cap_) {
+    std::move_backward(new_pos, this->end_, this->end_ + 1);
+    ++this->end_;
+    alloc_traits_::construct(this->alloc_, __to_raw_pointer(new_pos), value);
+  } else {
+    __swap_buffer<value_type, allocator_type &> swap_buffer(default_realloc_strategy_(size() + 1), new_pos - this->begin_, this->alloc_);
+    alloc_traits_::construct(this->alloc_, __to_raw_pointer(swap_buffer.end_), value);
+    ++swap_buffer.end_;
+    new_pos = swap_out_buffer_(swap_buffer);
+  }
+  return new_pos;
 }
 template <class T, class Allocator>
 typename vector<T, Allocator>::iterator vector<T, Allocator>::insert(const_iterator position, value_type &&value) {
