@@ -563,7 +563,7 @@ void vector<T, Allocator>::copy_append_(size_type n, const_reference value) {
 // move range [src_first, src_last) to the [dst_first,)
 // precondition: (this->cap_ - dst_first) > (src_last - src_first);
 // src_first < dst_first && dst_first <= this->end_
-// weak exception guarantee
+// basic exception guarantee
 template <class T, class Allocator>
 void vector<T, Allocator>::move_range_(pointer src_first, pointer src_last,
                                        pointer dst_first) {
@@ -635,9 +635,10 @@ void vector<T, Allocator>::swap_out_buffer_(
 // slice old element into two part by loc
 // move if noexcept or copy old element to swap buffer and then swap the buffer
 template <class T, class Allocator>
-void vector<T, Allocator>::swap_out_buffer_(
+typename vector<T, Allocator>::pointer vector<T, Allocator>::swap_out_buffer_(
     __split_buffer<value_type, allocator_type &> &swap_buffer, pointer loc) {
   pointer temp_loc = loc;
+  pointer ret_pointer = swap_buffer.begin_;
   while (temp_loc != this->begin_) {
     alloc_traits_::construct(this->alloc_,
                              __to_raw_pointer(swap_buffer.begin_ - 1),
@@ -655,6 +656,7 @@ void vector<T, Allocator>::swap_out_buffer_(
   swap(this->end_, swap_buffer.end_);
   swap(this->cap_, swap_buffer.cap_);
   swap_buffer.storage_ = swap_buffer.begin_;
+  return ret_pointer;
 }
 
 template <class T, class Allocator>
@@ -1014,15 +1016,95 @@ void vector<T, Allocator>::push_back(value_type &&value) {
 
 template <class T, class Allocator>
 typename vector<T, Allocator>::iterator vector<T, Allocator>::insert(
-    const_iterator position, const value_type &value) {}
+    const_iterator position, const value_type &value) {
+  pointer pos = this->begin_ + std::distance(begin(), position);
+  if (this->end_ < this->cap_) {
+    if (pos == this->end_) {
+      // push_back
+      alloc_traits_::construct(this->alloc_, __to_raw_pointer(this->end_),
+                               value);
+      ++this->end_;
+    } else {
+      // move range for doing assignment at pos
+      move_range_(pos, this->end_, pos + 1);
+      // obtain the pointer to value address
+      const_pointer pointer_to_value =
+          pointer_traits<const_pointer>::pointer_to(value);
+      // do increment if value was move by move_range_
+      if (pos <= pointer_to_value && pointer_to_value < this->end_)
+        ++pointer_to_value;
+      *pos = *pointer_to_value;
+    }
+  } else {
+    __split_buffer<value_type, allocator_type &> swap_buffer(
+        default_realloc_strategy_(size() + 1), pos - this->begin_,
+        this->alloc_);
+    alloc_traits_::construct(this->alloc_, __to_raw_pointer(swap_buffer.end_),
+                             value);
+    ++swap_buffer.end_;
+    pos = swap_out_buffer_(swap_buffer, pos);
+  }
+  return iterator(pos);
+}
 
 template <class T, class Allocator>
 typename vector<T, Allocator>::iterator vector<T, Allocator>::insert(
-    const_iterator position, value_type &&value) {}
+    const_iterator position, value_type &&value) {
+  pointer pos = this->begin_ + std::distance(begin(), position);
+  if (this->end_ < this->cap_) {
+    if (pos == this->end_) {
+      // push_back
+      alloc_traits_::construct(this->alloc_, __to_raw_pointer(this->end_),
+                               std::move(value));
+      ++this->end_;
+    } else {
+      // move range for doing assignment at pos
+      move_range_(pos, this->end_, pos + 1);
+      *pos = std::move(value);
+    }
+  } else {
+    __split_buffer<value_type, allocator_type &> swap_buffer(
+        default_realloc_strategy_(size() + 1), pos - this->begin_,
+        this->alloc_);
+    alloc_traits_::construct(this->alloc_, __to_raw_pointer(swap_buffer.end_),
+                             std::move(value));
+    ++swap_buffer.end_;
+    pos = swap_out_buffer_(swap_buffer, pos);
+  }
+  return iterator(pos);
+}
 
 template <class T, class Allocator>
 typename vector<T, Allocator>::iterator vector<T, Allocator>::insert(
-    const_iterator position, size_type n, const value_type &value) {}
+    const_iterator position, size_type n, const value_type &value) {
+  pointer pos = this->begin_ + std::distance(begin(), position);
+  if (n != 0) {
+    if (n <= static_cast<size_type>(this->cap_ - this->end_)) {
+      size_type n_rest = n;
+      if (n_rest > static_cast < size_type(this->end_ - pos)) {
+        size_type construct_number = n_rest - (this->end_ - pos);
+        copy_construct_at_end_(construct_number, value);
+        n_rest -= construct_number;
+      }
+      if (n_rest > 0) {
+        move_range_(pos, pos + n_rest, pos + n);
+        const_pointer pointer_to_value =
+            pointer_traits<const_pointer>::pointer_to(value);
+        if (pos <= pointer_to_value && pointer_to_value < pos + n_rest)
+          pointer_to_value += n_rest;
+        for (int i = 0; i < n_rest; ++i) *(pos + i) = *pointer_to_value;
+      }
+    } else {
+      __split_buffer<value_type, allocator_type &> swap_buffer(
+          default_realloc_strategy_(size() + 1), pos - this->begin_,
+          this->alloc_);
+      swap_buffer.copy_construct_at_end_(n, value);
+      pos = swap_out_buffer_(swap_buffer, pos);
+    }
+  }
+  return iterator(pos);
+}
+
 template <class T, class Allocator>
 template <class InputIterator>
 typename vector<T, Allocator>::iterator vector<T, Allocator>::insert(
