@@ -119,13 +119,19 @@ struct __split_buffer {
   // >>> auxiliary function
 
   // construct element at end without capacity check
-  void default_construct_at_end_(size_type n);
+  void construct_at_end_(size_type n);
 
-  void copy_construct_at_end_(size_type n, const value_type &value);
+  void construct_at_end_(size_type n, const value_type &value);
+
+  template <class InputIterator>
+  typename enable_if<__is_input_iterator<InputIterator>::value &&
+                         !__is_forward_iterator<InputIterator>::value,
+                     void>::type
+  construct_at_end_(InputIterator first, InputIterator last);
 
   template <class ForwardIterator>
   typename enable_if<__is_forward_iterator<ForwardIterator>::value, void>::type
-  copy_construct_at_end_(ForwardIterator first, ForwardIterator last);
+  construct_at_end_(ForwardIterator first, ForwardIterator last);
 
   // destruct element at
   void destruct_at_begin_(pointer new_begin) noexcept;
@@ -152,7 +158,7 @@ struct __split_buffer {
 // precondition: n > 0; n <= back_spare_()
 // postcondition: size() == size() + n
 template <class T, class Allocator>
-void __split_buffer<T, Allocator>::default_construct_at_end_(size_type n) {
+void __split_buffer<T, Allocator>::construct_at_end_(size_type n) {
   do {
     // default constructor may throw
     alloc_traits_::construct(this->alloc_, __to_raw_pointer(this->end_));
@@ -166,8 +172,8 @@ void __split_buffer<T, Allocator>::default_construct_at_end_(size_type n) {
 // precondition: n > 0; n <= back_spare_()
 // postcondition: size() == size() + n
 template <class T, class Allocator>
-void __split_buffer<T, Allocator>::copy_construct_at_end_(
-    size_type n, const value_type &value) {
+void __split_buffer<T, Allocator>::construct_at_end_(size_type n,
+                                                     const value_type &value) {
   do {
     // copy constructor may throw
     alloc_traits_::construct(this->alloc_, __to_raw_pointer(this->end_), value);
@@ -179,20 +185,44 @@ void __split_buffer<T, Allocator>::copy_construct_at_end_(
 // copy constructs elements at end() with value of range first to last
 // throws if copy constructor of element throws
 // iterator must satisfy ForwardIterator
-// precondition: (d = distance(first, last)) > 0; d <= back_spare_()
+// precondition: d <= back_spare_()
+// postcondition:  size() == size() + d
+template <class T, class Allocator>
+template <class InputIterator>
+typename enable_if<__is_input_iterator<InputIterator>::value &&
+                       !__is_forward_iterator<InputIterator>::value,
+                   void>::type
+__split_buffer<T, Allocator>::construct_at_end_(InputIterator first,
+                                                InputIterator last) {
+  for (; first != last; ++first) {
+    // reserve if buffer is full
+    if (this->end_ == this->cap_) {
+      size_type new_cap = std::max<size_type>(2 * capacity(), 8);
+      reserve(new_cap);
+    }
+    alloc_traits_::construct_at_end_(this->alloc_, __to_raw_pointer(this->end_),
+                                     *first);
+    ++this->end_;
+  }
+}
+
+// copy constructs elements at end() with value of range first to last
+// throws if copy constructor of element throws
+// iterator must satisfy ForwardIterator
+// precondition: d <= back_spare_()
 // postcondition:  size() == size() + d
 template <class T, class Allocator>
 template <class ForwardIterator>
 typename enable_if<__is_forward_iterator<ForwardIterator>::value, void>::type
-__split_buffer<T, Allocator>::copy_construct_at_end_(ForwardIterator first,
-                                                     ForwardIterator last) {
-  do {
+__split_buffer<T, Allocator>::construct_at_end_(ForwardIterator first,
+                                                ForwardIterator last) {
+  for (; first != last; ++first) {
     // copy constructor may throw
     alloc_traits_::construct(this->alloc_, __to_raw_pointer(this->end_),
                              *first);
-    // if construct success, add end_
+    // if construct sucess, increment end_
     ++this->end_;
-  } while (++first != last);
+  }
 }
 
 // destruct from begin() to new_begin
@@ -276,8 +306,8 @@ __split_buffer<T, Allocator>::__split_buffer(
     this->storage_ = alloc_traits_::allocate(this->alloc_, new_capacity);
     this->cap_ = this->storage_ + new_capacity;
     this->begin_ = this->end_ = this->storage_ + x.front_spare_();
-    copy_construct_at_end_(std::move_iterator<iterator>(x.begin_),
-                           std::move_iterator<iterator>(x.end_));
+    construct_at_end_(std::move_iterator<iterator>(x.begin_),
+                      std::move_iterator<iterator>(x.end_));
   }
 }
 
@@ -320,12 +350,11 @@ template <class T, class Allocator>
 void __split_buffer<T, Allocator>::reserve(size_type n) {
   // allocate new space if n > capacity(), do nothing else
   if (n > capacity()) {
-    __split_buffer<value_type, allocator_remove_reference_type_ &> temp_buffer(
-        n, front_spare_(), this->alloc_);
-    iterator first = this->begin_;
-    iterator last = this->end_;
-    while (first != last)
-      temp_buffer.copy_construct_at_end_(1, std::move_if_noexcept(*first++));
+    __split_buffer<value_type, allocator_remove_reference_type_ &> swap_buffer(
+        new_cap, front_spare_(), this->alloc_);
+    for (pointer p = this->begin_; p != this->end_; ++p, ++swap_buffer.end_)
+      alloc_traits_::construct(this->alloc_, __to_raw_pointer(swap_buffer.end_),
+                               std::move_if_noexcept(*p));
     swap(temp_buffer);
   }
 }
@@ -336,11 +365,11 @@ void __split_buffer<T, Allocator>::shrink_to_fit() noexcept {
     // noexcept
     try {
       __split_buffer<value_type, allocator_remove_reference_type_ &>
-          temp_buffer(size(), 0, this->alloc_);
-      iterator first = this->begin_;
-      iterator last = this->end_;
-      while (first != last)
-        temp_buffer.copy_construct_at_end_(1, std::move_if_noexcept(*first++));
+          swap_buffer(size(), 0, this->alloc_);
+      for (pointer p = this->begin_; p != this->end_; ++p, ++swap_buffer.end_)
+        alloc_traits_::construct(this->alloc_,
+                                 __to_raw_pointer(swap_buffer.end_),
+                                 std::move_if_noexcept(*p));
       swap(temp_buffer);
     } catch (...) {
     }
@@ -364,9 +393,8 @@ void __split_buffer<T, Allocator>::push_front(const value_type &x) {
       // front_sparse() of new temp at least 1
       __split_buffer<value_type, allocator_remove_reference_type_ &>
           temp_buffer(new_cap, (new_cap + 3) / 4, this->alloc_);
-      temp_buffer.copy_construct_at_end_(
-          std::move_iterator<iterator>(this->begin_),
-          std::move_iterator<iterator>(this->end_));
+      temp_buffer.construct_at_end_(std::move_iterator<iterator>(this->begin_),
+                                    std::move_iterator<iterator>(this->end_));
       swap(temp_buffer);
     }
   }
@@ -392,9 +420,8 @@ void __split_buffer<T, Allocator>::push_front(value_type &&x) {
       // front_sparse() of new temp at least 1
       __split_buffer<value_type, allocator_remove_reference_type_ &>
           temp_buffer(new_cap, (new_cap + 3) / 4, this->alloc_);
-      temp_buffer.copy_construct_at_end_(
-          std::move_iterator<iterator>(this->begin_),
-          std::move_iterator<iterator>(this->end_));
+      temp_buffer.construct_at_end_(std::move_iterator<iterator>(this->begin_),
+                                    std::move_iterator<iterator>(this->end_));
       swap(temp_buffer);
     }
   }
@@ -418,9 +445,8 @@ void __split_buffer<T, Allocator>::push_back(const value_type &x) {
           std::max<size_type>(2 * static_cast<size_type>(capacity()), 1);
       __split_buffer<value_type, allocator_remove_reference_type_ &>
           temp_buffer(new_cap, new_cap / 4, this->alloc_);
-      temp_buffer.copy_construct_at_end_(
-          std::move_iterator<iterator>(this->begin_),
-          std::move_iterator<iterator>(this->end_));
+      temp_buffer.construct_at_end_(std::move_iterator<iterator>(this->begin_),
+                                    std::move_iterator<iterator>(this->end_));
       swap(temp_buffer);
     }
   }
@@ -442,9 +468,8 @@ void __split_buffer<T, Allocator>::push_back(value_type &&x) {
           std::max<size_type>(2 * static_cast<size_type>(capacity()), 1);
       __split_buffer<value_type, allocator_remove_reference_type_ &>
           temp_buffer(new_cap, new_cap / 4, this->alloc_);
-      temp_buffer.copy_construct_at_end_(
-          std::move_iterator<iterator>(this->begin_),
-          std::move_iterator<iterator>(this->end_));
+      temp_buffer.construct_at_end_(std::move_iterator<iterator>(this->begin_),
+                                    std::move_iterator<iterator>(this->end_));
       swap(temp_buffer);
     }
   }
@@ -468,9 +493,8 @@ void __split_buffer<T, Allocator>::emplace_back(Args... args) {
           std::max<size_type>(2 * static_cast<size_type>(capacity()), 1);
       __split_buffer<value_type, allocator_remove_reference_type_ &>
           temp_buffer(new_cap, new_cap / 4, this->alloc_);
-      temp_buffer.copy_construct_at_end_(
-          std::move_iterator<iterator>(this->begin_),
-          std::move_iterator<iterator>(this->end_));
+      temp_buffer.construct_at_end_(std::move_iterator<iterator>(this->begin_),
+                                    std::move_iterator<iterator>(this->end_));
       swap(temp_buffer);
     }
   }

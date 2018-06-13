@@ -40,6 +40,9 @@ using iterator_traits = std::iterator_traits<T>;
 template <class T, class U>
 using is_convertible = std::is_convertible<T, U>;
 
+template <class T, class U>
+using is_assignable = std::is_assignable<T, U>;
+
 template <class T, class... Args>
 using is_constructible = std::is_constructible<T, Args...>;
 
