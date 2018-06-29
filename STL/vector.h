@@ -478,6 +478,8 @@ class vector : private __vector_base<T, Allocator> {
       __split_buffer<value_type, allocator_type &> &swap_buffer, pointer loc);
 
   size_type default_realloc_strategy_(size_type new_size) const;
+
+  void destroy_at_end_(pointer loc) noexcept { base_::destroy_at_end_(loc); }
 };
 
 // >>> private auxiliary function
@@ -1132,24 +1134,23 @@ typename enable_if<
         is_constructible<value_type, typename iterator_traits<
                                          InputIterator>::reference>::value,
     typename vector<T, Allocator>::iterator>::type
-vector<T, Allocator>::insert(const_iterator position, InputIterator first, InputIterator last) {
+vector<T, Allocator>::insert(const_iterator position, InputIterator first,
+                             InputIterator last) {
   pointer pos = this->begin_ + (position - begin());
   pointer old_end = this->end_;
-  while(this->end_ < this->cap_ && first != last) {
+  while (this->end_ < this->cap_ && first != last) {
     alloc_traits_::construct(this->alloc_, this->end_, *first);
     ++this->end_;
     ++first;
   }
   __split_buffer<value_type, allocator_type &> temp_buffer(this->alloc_);
-  if(first != last) {
+  if (first != last) {
     try {
-        temp_buffer.copy_construct_at_end_(first, last);
-    } catch(...) {
-      
+      temp_buffer.copy_construct_at_end_(first, last);
+    } catch (...) {
       throw(...);
     }
   }
-
 }
 
 template <class T, class Allocator>
@@ -1159,15 +1160,12 @@ typename enable_if<
         is_constructible<value_type, typename iterator_traits<
                                          ForwardIterator>::reference>::value,
     typename vector<T, Allocator>::iterator>::type
-vector<T, Allocator>::insert(const_iterator position, ForwardIterator first, ForwardIterator last) {
-
-}
+vector<T, Allocator>::insert(const_iterator position, ForwardIterator first,
+                             ForwardIterator last) {}
 
 template <class T, class Allocator>
 typename vector<T, Allocator>::iterator vector<T, Allocator>::insert(
-    const_iterator position, std::initializer_list<value_type> init) {
-
-}
+    const_iterator position, std::initializer_list<value_type> init) {}
 
 template <class T, class Allocator>
 template <class... Args>
@@ -1191,14 +1189,31 @@ typename vector<T, Allocator>::iterator vector<T, Allocator>::emplace(
 
 template <class T, class Allocator>
 typename vector<T, Allocator>::iterator vector<T, Allocator>::erase(
-    const_iterator position) {}
+    const_iterator position) {
+  // remove the constness
+  pointer pos = this->begin_ + (position - begin());
+  pointer last = std::move(pos + 1, this->end_, pos);
+  this->destroy_at_end_(last);
+  return iterator(pos);
+}
 
 template <class T, class Allocator>
 typename vector<T, Allocator>::iterator vector<T, Allocator>::erase(
-    const_iterator first, const_iterator last) {}
+    const_iterator first, const_iterator last) {
+  pointer pos_first = this->begin_ + (first - begin());
+  pointer pos_last = this->begin_ + (last - begin());
+  if (pos_first != pos_last) {
+    pointer last = std::move(pos_last, this->end_, pos_first);
+    this->destroy_at_end_(last);
+  }
+  return iterator(pos_first);
+}
 
 template <class T, class Allocator>
-void vector<T, Allocator>::pop_back() {}
+void vector<T, Allocator>::pop_back() {
+  assert(!empty(), "vector: pop_back() act on empty container");
+  this->destroy_at_end_(this->end_ - 1);
+}
 
 template <class T, class Allocator>
 void vector<T, Allocator>::swap(vector &) noexcept(
