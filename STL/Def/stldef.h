@@ -1,6 +1,7 @@
 #ifndef _STLDEF_H__
 #define _STLDEF_H__
 
+#include <algorithm>
 #include <iterator>
 #include <memory>
 #include <type_traits>
