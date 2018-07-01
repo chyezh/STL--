@@ -2,6 +2,7 @@
 #define _STLDEF_H__
 
 #include <algorithm>
+#include <numeric>
 #include <cassert>
 #include <iterator>
 #include <memory>

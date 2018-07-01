@@ -253,7 +253,7 @@ class vector : private __vector_base<T, Allocator> {
               is_constructible<
                   value_type,
                   typename iterator_traits<InputIterator>::reference>::value,
-          InputIterator>::value_type last);
+          InputIterator>::type last);
 
   template <class ForwardIterator>
   void assign(
@@ -263,7 +263,7 @@ class vector : private __vector_base<T, Allocator> {
               is_constructible<
                   value_type,
                   typename iterator_traits<ForwardIterator>::reference>::value,
-          ForwardIterator>::value_type last);
+          ForwardIterator>::type last);
 
   void assign(std::initializer_list<value_type> init) {
     assign(init.begin(), init.end());
@@ -560,9 +560,9 @@ vector<T, Allocator>::copy_construct_at_end_(ForwardIterator first,
 // default append n element, may reallocate new space
 template <class T, class Allocator>
 void vector<T, Allocator>::default_append_(size_type n) {
-  if (n >= static_cast<size_type>(capacity() - size_type())) {
+  if (n > static_cast<size_type>(this->cap_ - this->end_)) {
     __split_buffer<value_type, allocator_type &> swap_buffer(
-        default_realloc_strategy_(capacity() + 1), size(), this->alloc_);
+        default_realloc_strategy_(size() + n), size(), this->alloc_);
     swap_out_buffer_(swap_buffer);
   }
   default_construct_at_end_(n);
@@ -571,9 +571,9 @@ void vector<T, Allocator>::default_append_(size_type n) {
 // copy append n element with value, may reallocate new space
 template <class T, class Allocator>
 void vector<T, Allocator>::copy_append_(size_type n, const_reference value) {
-  if (n >= static_cast<size_type>(capacity() - size_type())) {
+  if (n > static_cast<size_type>(this->cap_ - this->end_)) {
     __split_buffer<value_type, allocator_type &> swap_buffer(
-        default_realloc_strategy_(capacity() + 1), size(), this->alloc_);
+        default_realloc_strategy_(size() + n), size(), this->alloc_);
     swap_out_buffer_(swap_buffer);
   }
   copy_construct_at_end_(n, value);
@@ -910,7 +910,7 @@ void vector<T, Allocator>::assign(
             !__is_forward_iterator<InputIterator>::value &&
             is_constructible<value_type, typename iterator_traits<
                                              InputIterator>::reference>::value,
-        InputIterator>::value_type last) {
+        InputIterator>::type last) {
   clear();
   while (first != last) emplace_back_with_single_value_(*first++);
 }
@@ -924,7 +924,7 @@ void vector<T, Allocator>::assign(
             is_constructible<
                 value_type,
                 typename iterator_traits<ForwardIterator>::reference>::value,
-        ForwardIterator>::value_type last) {
+        ForwardIterator>::type last) {
   size_type new_size = static_cast<size_type>(std::distance(first, last));
   if (new_size <= capacity()) {
     size_type old_size = size();
@@ -1218,7 +1218,7 @@ inline typename vector<T, Allocator>::reference
 vector<T, Allocator>::emplace_back(Args &&... args) {
   if (this->end_ < this->cap_) {
     alloc_traits_::construct(this->alloc_, __to_raw_pointer(this->end_),
-                             std::forward(args...));
+                             std::forward<Args>(args)...);
     ++this->end_;
   } else
     emplace_back_when_capacity_is_full_(std::forward<Args>(args)...);

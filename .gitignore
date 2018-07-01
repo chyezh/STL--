@@ -1,6 +1,9 @@
 # Prerequisites
 *.d
 
+# gtest
+gtest
+
 # vscode
 .vs
 .vscode
