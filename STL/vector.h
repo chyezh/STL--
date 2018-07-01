@@ -1200,7 +1200,7 @@ vector<T, Allocator>::insert(const_iterator position, ForwardIterator first,
           default_realloc_strategy_(size() + n), pos - this->begin_,
           this->alloc_);
       swap_buffer.construct_at_end_(first, last);
-      swap_out_buffer_(swap_buffer);
+      pos = swap_out_buffer_(swap_buffer, pos);
     }
   }
   return iterator(pos);
@@ -1209,7 +1209,7 @@ vector<T, Allocator>::insert(const_iterator position, ForwardIterator first,
 template <class T, class Allocator>
 typename vector<T, Allocator>::iterator vector<T, Allocator>::insert(
     const_iterator position, std::initializer_list<value_type> init) {
-    insert(position, init.begin(), init.end());
+  insert(position, init.begin(), init.end());
 }
 
 template <class T, class Allocator>
@@ -1228,7 +1228,34 @@ vector<T, Allocator>::emplace_back(Args &&... args) {
 template <class T, class Allocator>
 template <class... Args>
 typename vector<T, Allocator>::iterator vector<T, Allocator>::emplace(
-    const_iterator position, Args &&... args) {}
+    const_iterator position, Args &&... args) {
+  // remove constness
+  pointer pos = this->begin_ + (position - begin());
+  if (this->end_ < this->cap_) {
+    if (pos == this->end_) {
+      // push_back
+      alloc_traits_::construct(this->alloc_, __to_raw_pointer(this->end_),
+                               std::forward<Args>(args)...);
+      ++this->end_;
+    } else {
+      // create temp value to prevent error when args is relative to vector
+      // itself
+      value_type temp_value(std::forward<Args>(args)...);
+      // move range for doing assignment at pos
+      move_range_(pos, this->end_, pos + 1);
+      *pos = std::move(temp_value);
+    }
+  } else {
+    __split_buffer<value_type, allocator_type &> swap_buffer(
+        default_realloc_strategy_(size() + 1), pos - this->begin_,
+        this->alloc_);
+    alloc_traits_::construct(this->alloc_, __to_raw_pointer(swap_buffer.end_),
+                             std::forward<Args>(args)...);
+    ++swap_buffer.end_;
+    pos = swap_out_buffer_(swap_buffer, pos);
+  }
+  return iterator(pos);
+}
 
 // remove
 
@@ -1261,13 +1288,13 @@ void vector<T, Allocator>::pop_back() {
 }
 
 template <class T, class Allocator>
-void vector<T, Allocator>::swap(vector & x) noexcept(
+void vector<T, Allocator>::swap(vector &x) noexcept(
     alloc_traits_::propagate_on_container_swap::value ||
     alloc_traits_::is_always_equal::value) {
-    swap(this->begin_, x.begin_);
-    swap(this->end_, x.end_);
-    swap(this->cap_, x.cap_);
-    __swap_allocator(this->alloc_, x.alloc_);
+  swap(this->begin_, x.begin_);
+  swap(this->end_, x.end_);
+  swap(this->cap_, x.cap_);
+  __swap_allocator(this->alloc_, x.alloc_);
 }
 
 STL_END
