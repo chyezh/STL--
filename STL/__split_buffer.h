@@ -351,11 +351,11 @@ void __split_buffer<T, Allocator>::reserve(size_type n) {
   // allocate new space if n > capacity(), do nothing else
   if (n > capacity()) {
     __split_buffer<value_type, allocator_remove_reference_type_ &> swap_buffer(
-        new_cap, front_spare_(), this->alloc_);
+        n, front_spare_(), this->alloc_);
     for (pointer p = this->begin_; p != this->end_; ++p, ++swap_buffer.end_)
       alloc_traits_::construct(this->alloc_, __to_raw_pointer(swap_buffer.end_),
                                std::move_if_noexcept(*p));
-    swap(temp_buffer);
+    swap(swap_buffer);
   }
 }
 
@@ -370,7 +370,7 @@ void __split_buffer<T, Allocator>::shrink_to_fit() noexcept {
         alloc_traits_::construct(this->alloc_,
                                  __to_raw_pointer(swap_buffer.end_),
                                  std::move_if_noexcept(*p));
-      swap(temp_buffer);
+      swap(swap_buffer);
     } catch (...) {
     }
   }

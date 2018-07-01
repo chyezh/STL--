@@ -335,22 +335,22 @@ class vector : private __vector_base<T, Allocator> {
   const_reference at(size_type n) const;
 
   reference front() {
-    assert(!empty(), "vector: front() called for empty vector");
+    assert(!empty());
     return *this->begin_;
   }
 
   const_reference front() const {
-    assert(!empty(), "vector: front() called for empty vector");
+    assert(!empty());
     return *this->begin_;
   }
 
   reference back() {
-    assert(!empty(), "vector: back() called for empty vector");
+    assert(!empty());
     return *(this->end_ - 1);
   }
 
   const_reference back() const {
-    assert(!empty(), "vector: back() called for empty vector");
+    assert(!empty());
     return *(this->end_ - 1);
   }
 
@@ -414,10 +414,10 @@ class vector : private __vector_base<T, Allocator> {
  private:
   // >>> private auxiliary function
   // throw length error
-  void throw_length_error_() { throw std::length_error("vector"); }
+  void throw_length_error_() const { throw std::length_error("vector"); }
 
   // throw out of range error
-  void throw_out_of_range_() { throw std::out_of_range("vector"); }
+  void throw_out_of_range_() const { throw std::out_of_range("vector"); }
 
   // allocate n elements
   void allocate_(size_type n);
@@ -646,9 +646,9 @@ void vector<T, Allocator>::swap_out_buffer_(
     --this->end_;
     --swap_buffer.begin_;
   }
-  swap(this->begin_, swap_buffer.begin_);
-  swap(this->end_, swap_buffer.end_);
-  swap(this->cap_, swap_buffer.cap_);
+  std::swap(this->begin_, swap_buffer.begin_);
+  std::swap(this->end_, swap_buffer.end_);
+  std::swap(this->cap_, swap_buffer.cap_);
   swap_buffer.storage_ = swap_buffer.begin_;
 }
 
@@ -988,14 +988,14 @@ void vector<T, Allocator>::shrink_to_fit() noexcept {
 template <class T, class Allocator>
 typename vector<T, Allocator>::reference vector<T, Allocator>::operator[](
     size_type n) {
-  assert(n < size(), "vector: operator[] index out of bounds");
+  assert(n < size());
   return this->begin_[n];
 }
 
 template <class T, class Allocator>
 typename vector<T, Allocator>::const_reference vector<T, Allocator>::operator[](
     size_type n) const {
-  assert(n < size(), "vector: operator[] index out of bounds");
+  assert(n < size());
   return this->begin_[n];
 }
 
@@ -1283,7 +1283,7 @@ typename vector<T, Allocator>::iterator vector<T, Allocator>::erase(
 
 template <class T, class Allocator>
 void vector<T, Allocator>::pop_back() {
-  assert(!empty(), "vector: pop_back() act on empty container");
+  assert(!empty());
   this->destroy_at_end_(this->end_ - 1);
 }
 
