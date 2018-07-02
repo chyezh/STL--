@@ -591,7 +591,7 @@ void vector<T, Allocator>::move_range_(pointer src_first, pointer src_last,
   // move construct the additional element
   for (pointer p = src_first + n; p < src_last; ++p, ++this->end_)
     alloc_traits_::construct(this->alloc_, __to_raw_pointer(this->end_),
-                             std::move(p));
+                             std::move(*p));
   // move the rest element
   std::move_backward(src_first, src_first + n, old_end);
 }
@@ -672,9 +672,9 @@ typename vector<T, Allocator>::pointer vector<T, Allocator>::swap_out_buffer_(
     ++loc;
     ++swap_buffer.end_;
   }
-  swap(this->begin_, swap_buffer.begin_);
-  swap(this->end_, swap_buffer.end_);
-  swap(this->cap_, swap_buffer.cap_);
+  std::swap(this->begin_, swap_buffer.begin_);
+  std::swap(this->end_, swap_buffer.end_);
+  std::swap(this->cap_, swap_buffer.cap_);
   swap_buffer.storage_ = swap_buffer.begin_;
   return ret_pointer;
 }
@@ -1037,7 +1037,7 @@ void vector<T, Allocator>::push_back(value_type &&value) {
 template <class T, class Allocator>
 typename vector<T, Allocator>::iterator vector<T, Allocator>::insert(
     const_iterator position, const value_type &value) {
-  pointer pos = this->begin_ + std::distance(begin(), position);
+  pointer pos = this->begin_ + (position - this->begin_);
   if (this->end_ < this->cap_) {
     if (pos == this->end_) {
       // push_back
@@ -1178,7 +1178,7 @@ vector<T, Allocator>::insert(const_iterator position, ForwardIterator first,
                              ForwardIterator last) {
   // remove constness
   pointer pos = this->begin_ + (position - begin());
-  typename iterator_traits<ForwardIterator>::differenc_type n =
+  typename iterator_traits<ForwardIterator>::difference_type n =
       std::distance(first, last);
   if (n != 0) {
     if (n <= static_cast<difference_type>(this->cap_ - this->end_)) {
@@ -1291,9 +1291,9 @@ template <class T, class Allocator>
 void vector<T, Allocator>::swap(vector &x) noexcept(
     alloc_traits_::propagate_on_container_swap::value ||
     alloc_traits_::is_always_equal::value) {
-  swap(this->begin_, x.begin_);
-  swap(this->end_, x.end_);
-  swap(this->cap_, x.cap_);
+  std::swap(this->begin_, x.begin_);
+  std::swap(this->end_, x.end_);
+  std::swap(this->cap_, x.cap_);
   __swap_allocator(this->alloc_, x.alloc_);
 }
 
