@@ -2,10 +2,12 @@
 #define _STLDEF_H__
 
 #include <algorithm>
-#include <numeric>
 #include <cassert>
+#include <initializer_list>
 #include <iterator>
 #include <memory>
+#include <numeric>
+#include <stdexcept>
 #include <type_traits>
 
 #define STL_BEGIN namespace stl {

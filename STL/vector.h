@@ -1,10 +1,6 @@
 #ifndef _STL_VECTOR__
 #define _STL_VECTOR__
 
-#include <initializer_list>
-#include <iostream>
-#include <iterator>
-#include <stdexcept>
 #include "Def/stldef.h"
 #include "__split_buffer.h"
 
