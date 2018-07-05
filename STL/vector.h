@@ -29,7 +29,7 @@ class __vector_base {
   // >>> constructor
   // default constructor
   __vector_base() noexcept(
-      std::is_nothrow_default_constructible<allocator_type>::value)
+      is_nothrow_default_constructible<allocator_type>::value)
       : begin_(nullptr),
         end_(nullptr),
         cap_(nullptr),
@@ -98,7 +98,7 @@ class __vector_base {
     alloc_ = x.alloc_;
   }
 
-  // copy-trival for allocator.
+  // copy-trival for allocator
   void copy_assign_alloc_(const __vector_base &x, false_type) {}
 
   // propagate_on_container_move_assignment
@@ -110,10 +110,8 @@ class __vector_base {
     alloc_ = std::move(x.alloc_);
   }
 
-  // move-trival for allocator. noexcept
-  void move_assign_alloc_(const __vector_base &x, false_type) noexcept {
-    clear();
-  }
+  // move-trival for allocator noexcept
+  void move_assign_alloc_(const __vector_base &x, false_type) noexcept {}
 
  protected:
   // >>> data member

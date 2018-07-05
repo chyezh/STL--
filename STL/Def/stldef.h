@@ -51,6 +51,12 @@ using is_assignable = std::is_assignable<T, U>;
 template <class T, class... Args>
 using is_constructible = std::is_constructible<T, Args...>;
 
+template <class T>
+using is_nothrow_default_constructible = std::is_nothrow_default_constructible<T>;
+
+template <class T>
+using is_nothrow_constructible = std::is_nothrow_constructible<T>;
+
 /* using some utilities of namespace std */
 // default allocator
 template <class T>
