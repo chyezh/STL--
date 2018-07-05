@@ -8,19 +8,230 @@ STL_BEGIN
 template <class T, class VoidPtr>
 struct __list_node;
 
-// list node base type for data section
+// list node base type for pointer section
 template <class T, class VoidPtr>
 struct __list_node_base {
-  typedef pointer_traits<VoidPtr>::rebind<__list_node<T, VoidPtr>>
-      node_pointer_;
-  typedef pointer_traits<VoidPtr>::rebind<__list_node_base<T, VoidPtr>>
-      node_base_pointer_;
+  // >>> member types
+  typedef
+      typename pointer_traits<VoidPtr>::template rebind<__list_node<T, VoidPtr>>
+          node_pointer_;
+  typedef typename pointer_traits<VoidPtr>::template rebind<
+      __list_node_base<T, VoidPtr>>
+      link_pointer_;
+  
+  __list_node_base() : prev_(self_()), next_(self_()) {}
+
+  // get pointer to base self
+  link_pointer_ self_() {
+      return pointer_traits<link_pointer_>::pointer_to(*this);
+  }
+
+  // a cast function from base to node
+  node_pointer_ as_node_() {
+      return static_cast<node_pointer_>(self_());
+  }
+
+    // pointer for link
+  link_pointer_ prev_;
+  link_pointer_ next_; 
+};
+
+// list node keep data section 
+template <class T, class VoidPtr>
+struct __list_node : public __list_node_base<T, VoidPtr> {
+  // >>> member types
+  typedef __list_node_base<T, VoidPtr> base_;
+  typedef typename base_::link_pointer_ link_pointer_;
+
+  // a cast function from node to base
+  link_pointer_ as_link() {
+      return static_cast<link_pointer_>(base_::self_());
+  }
+  
+  // data section
+  T value_;
+};
+
+template <class T, class Allocator> class list;
+template <class T, class Allocator> class __list_base;
+template <class T, class VoidPtr> class __list_const_iterator;
+
+template <class T, class VoidPtr>
+class __list_iterator {
+  // >>> memeber types
+  typedef typename __list_node_base<T, VoidPtr>::link_pointer_ link_pointer_;
+ public:
+  // type traits
+  typedef bidirectional_iterator_tag iterator_category;
+  typedef T value_type;
+  typedef value_type& reference;
+  typedef typename pointer_traits<VoidPtr>:: template rebind<value_type> pointer;
+  typedef typename pointer_traits<pointer>::difference_type difference_type;
+
+ private:
+  // friend class
+  template <class, class> friend class list;
+  template <class, class> friend class __list_base;
+  template <class, class> friend class __list_const_iterator;
+
+ public:
+  // bidirectional iterator interface
+  reference operator*() const {
+      return ptr_->as_node_()->value_;
+  }
+
+  pointer operator->() const {
+      return pointer_traits<pointer>::pointer_to(ptr_->as_node_()->value_);
+  }
+
+  __list_iterator& operator++() {
+      ptr_ = ptr_->next_;
+      return *this;
+  }
+
+  __list_iterator operator++(int) {
+      __list_iterator old_iter(ptr_);
+      ptr_ = ptr_->next_;
+      return old_iter;
+  }
+ 
+  __list_iterator& operator--() {
+      ptr_ = ptr_->prev_;
+      return *this;
+  }
+
+  __list_iterator operator--(int) {
+      __list_iterator old_iter(ptr_);
+      ptr_ = ptr_->prev_;
+      return old_iter;
+  }
+
+  friend bool operator==(const __list_iterator& lhs, const __list_iterator& rhs) {
+      return lhs.ptr_ == rhs.ptr_;
+  }
+
+  friend bool operator!=(const __list_iterator& lhs, const __list_iterator& rhs) {
+      return !(lhs == rhs);
+  }
+
+  // >>> constructor
+ public:
+  // default constructor
+  __list_iterator() noexcept : ptr_(nullptr) {}
+
+ private:
+  // for friend class
+  explicit __list_iterator(link_pointer_ p) noexcept : ptr_(p) {}
+
+ private:
+  // data section
+  link_pointer_ ptr_;
 };
 
 template <class T, class VoidPtr>
-struct __list_node {};
+class __list_const_iterator {
+  // >>> memeber types
+  typedef typename __list_node_base<T, VoidPtr>::link_pointer_ link_pointer_;
+ public:
+  // type traits
+  typedef bidirectional_iterator_tag iterator_category;
+  typedef T value_type;
+  typedef const value_type& reference;
+  typedef typename pointer_traits<VoidPtr>:: template rebind<const value_type> pointer;
+  typedef typename pointer_traits<pointer>::difference_type difference_type;
 
-template <class T, class Alloc = allocator<T>>
+ private:
+  template<class, class> friend class list;
+  template<class, class> friend class __list_base;
+
+ public:
+  // bidirectional iterator interface
+  reference operator*() const {
+      return ptr_->as_node_()->value_;
+  }
+
+  pointer operator->() const {
+      return pointer_traits<pointer>::pointer_to(ptr_->as_node_()->value_);
+  }
+
+  __list_const_iterator& operator++() {
+      ptr_ = ptr_->next_;
+      return *this;
+  }
+
+  __list_const_iterator operator++(int) {
+      __list_const_iterator old_iter(ptr_);
+      ptr_ = ptr_->next_;
+      return old_iter;
+  }
+ 
+  __list_const_iterator& operator--() {
+      ptr_ = ptr_->prev_;
+      return *this;
+  }
+
+  __list_const_iterator operator--(int) {
+      __list_const_iterator old_iter(ptr_);
+      ptr_ = ptr_->prev_;
+      return old_iter;
+  }
+
+  friend bool operator==(const __list_const_iterator& lhs, const __list_const_iterator& rhs) {
+      return lhs.ptr_ == rhs.ptr_;
+  }
+
+  friend bool operator!=(const __list_const_iterator& lhs, const __list_const_iterator& rhs) {
+      return !(lhs == rhs);
+  }
+  
+  // >>> constructor
+ public:
+  // default constructor
+  __list_const_iterator() noexcept : ptr_(nullptr) {}
+
+  // construct from __list_iterator
+  __list_const_iterator(const __list_iterator<T, VoidPtr>& iter) : ptr_(iter.ptr_) {}
+
+ private:
+  // for friend class
+  explicit __list_const_iterator(link_pointer_ p) noexcept : ptr_(p) {}
+
+ private:
+  // data section
+  link_pointer_ ptr_;
+};
+
+template <class T, class Allocator>
+class __list_base {
+  // >>> member types
+ protected:
+  typedef T value_type;
+  typedef Allocator allocator_type;
+  typedef allocator_traits<allocator_type> alloc_traits_;
+  typedef typename alloc_traits_::size_type size_type;
+  typedef typename alloc_traits_::void_pointer void_pointer_;
+  // node and iterator
+  typedef __list_node<value_type, void_pointer_> node_;
+  typedef __list_node_base<value_type, void_pointer_> node_base_;
+  typedef typename node_::link_pointer_ link_pointer_;
+  typedef __list_iterator<value_type, void_pointer_> iterator;
+  typedef __list_const_iterator<value_type, void_pointer_> const_iterator;
+  typedef typename iterator::difference_type difference_type;
+  // rebind allocator type
+  typedef typename alloc_traits_:: template rebind_alloc<node_> node_allocator_type_;
+  typedef allocator_traits<node_allocator_type_> node_alloc_traits_;
+  typedef typename alloc_traits_:: template rebind_alloc<node_base_> node_base_allocator_type_;
+  typedef allocator_traits<node_allocator_type_> node_base_alloc_traits_;
+
+  
+  // >>> data member
+  node_base_ end_;
+  size_type size_;
+  node_allocator_type_ node_alloc_;
+};
+
+
+template <class T, class Allocator = allocator<T>>
 class list {
  public:
   // >>> member types
