@@ -16,59 +16,65 @@
 STL_BEGIN
 
 // >>> iterator category tag.
-using std::bidirectional_iterator_tag;
-using std::forward_iterator_tag;
-using std::input_iterator_tag;
-using std::output_iterator_tag;
-using std::random_access_iterator_tag;
+using ::std::bidirectional_iterator_tag;
+using ::std::forward_iterator_tag;
+using ::std::input_iterator_tag;
+using ::std::output_iterator_tag;
+using ::std::random_access_iterator_tag;
 
 // >>> type traits
 template <class T, T v>
-using integral_constant = std::integral_constant<T, v>;
+using integral_constant = ::std::integral_constant<T, v>;
 
-using std::true_type;
+using ::std::true_type;
 
-using std::false_type;
+using ::std::false_type;
 
 template <class...>
 using void_t = void;
 
 template <bool B, class T>
-using enable_if = std::enable_if<B, T>;
+using enable_if = ::std::enable_if<B, T>;
 
 template <class T>
-using pointer_traits = std::pointer_traits<T>;
+using pointer_traits = ::std::pointer_traits<T>;
 
 template <class T>
-using iterator_traits = std::iterator_traits<T>;
+using iterator_traits = ::std::iterator_traits<T>;
 
 template <class T, class U>
-using is_convertible = std::is_convertible<T, U>;
+using is_convertible = ::std::is_convertible<T, U>;
 
 template <class T, class U>
-using is_assignable = std::is_assignable<T, U>;
+using is_assignable = ::std::is_assignable<T, U>;
 
 template <class T, class... Args>
-using is_constructible = std::is_constructible<T, Args...>;
+using is_constructible = ::std::is_constructible<T, Args...>;
 
 template <class T>
-using is_nothrow_default_constructible = std::is_nothrow_default_constructible<T>;
+using is_nothrow_default_constructible = ::std::is_nothrow_default_constructible<T>;
 
 template <class T>
-using is_nothrow_constructible = std::is_nothrow_constructible<T>;
+using is_nothrow_constructible = ::std::is_nothrow_constructible<T>;
+
+template <class T>
+using is_nothrow_move_constructible = ::std::is_nothrow_move_constructible<T>;
+
+template <class T>
+using is_nothrow_move_assignable = ::std::is_nothrow_move_assignable<T>;
 
 /* using some utilities of namespace std */
 // default allocator
 template <class T>
-using allocator = std::allocator<T>;
+using allocator = ::std::allocator<T>;
 
 template <class Allocator>
-using allocator_traits = std::allocator_traits<Allocator>;
+using allocator_traits = ::std::allocator_traits<Allocator>;
 
 // swap allocator
 template <class Allocator>
 void __swap_allocator(Allocator alloc1, Allocator alloc2, true_type) noexcept {
-  std::swap(alloc1, alloc2);
+  ::std::swap(alloc1, alloc2);
 }
 
 template <class Allocator>
@@ -105,7 +111,7 @@ class __allocator_destructor {
 
 // smart pointer
 template <class T, class Deleter>
-using unique_ptr = std::unique_ptr<T, Deleter>;
+using unique_ptr = ::std::unique_ptr<T, Deleter>;
 
 // change like pointer type to raw pointer
 template <class T>

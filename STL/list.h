@@ -30,10 +30,8 @@ struct __list_node_base {
   // a cast function from base to node
   node_pointer_ as_node_() { return static_cast<node_pointer_>(self_()); }
 
-    // get position of value_
-  T* get_adressof_value_() {
-    return std::adressof(as_node_()->value_);
-  }
+  // get position of value_
+  T *get_adressof_value_() { return ::std::addressof(as_node_()->value_); }
 
   // pointer for link
   link_pointer_ prev_;
@@ -51,8 +49,6 @@ struct __list_node : public __list_node_base<T, VoidPtr> {
   link_pointer_ as_link_() {
     return static_cast<link_pointer_>(base_::self_());
   }
-
-
 
   // data section
   T value_;
@@ -248,8 +244,8 @@ class __list_base {
       node_base_allocator_type_;
   typedef allocator_traits<node_allocator_type_> node_base_alloc_traits_;
 
+ protected:
   // >>> constructor
- public:
   // default constructor
   __list_base() noexcept(
       is_nothrow_default_constructible<node_allocator_type_>::value)
@@ -266,14 +262,19 @@ class __list_base {
   // >>> destructor
   ~__list_base() { clear(); }
 
+  // access end_, remove cv qualifier before access end_
+  link_pointer_ end_link_() const noexcept {
+    return const_cast<node_base_&>(end_).self_();
+  }
+
   // >>> access
-  iterator begin() noexcept { return iterator(end_.next_); }
+  iterator begin() noexcept { return iterator(end_link_()->next_); }
 
-  const_iterator begin() const noexcept { return const_iterator(end_.next_); }
+  const_iterator begin() const noexcept { return const_iterator(end_link_()->next_); }
 
-  iterator end() noexcept { return iterator(end_.self_()); }
+  iterator end() noexcept { return iterator(end_link_()); }
 
-  const_iterator end() const noexcept { return const_iterator(end_.self_()); }
+  const_iterator end() const noexcept { return const_iterator(end_link_()); }
 
   // check isempty
   bool empty() const noexcept { return size_ == 0; }
@@ -291,7 +292,7 @@ class __list_base {
   // copy assignment of allocator
   void copy_assign_alloc_(const __list_base &x) {
     copy_assign_alloc_(
-        x, std::integral_constant<
+        x, ::std::integral_constant<
                bool, node_alloc_traits_::
                          propagate_on_container_copy_assignment::value>());
   }
@@ -299,7 +300,7 @@ class __list_base {
   // move assignment for allocator
   void move_assign_alloc_(const __list_base &x) noexcept(
       !node_alloc_traits_::propagate_on_container_move_assignment::value ||
-      std::is_nothrow_move_assignable<allocator_type>::value) {
+      ::std::is_nothrow_move_assignable<allocator_type>::value) {
     move_assign_alloc_(
         x,
         integral_constant<bool,
@@ -324,9 +325,9 @@ class __list_base {
   // allocattor need to be moved when container is move-assigned
   // noexcept if allocator is nothrow move assignable
   void move_assign_alloc_(const __list_base &x, true_type) noexcept(
-      std::is_nothrow_move_assignable<allocator_type>::value) {
+      ::std::is_nothrow_move_assignable<allocator_type>::value) {
     clear();
-    node_alloc_ = std::move(x.node_alloc_);
+    node_alloc_ = ::std::move(x.node_alloc_);
   }
 
   // move-trival for allocator noexcept
@@ -343,12 +344,12 @@ class __list_base {
 template <class T, class Allocator>
 void __list_base<T, Allocator>::clear() noexcept {
   if (!empty()) {
-    link_pointer_ first = end_.next_;
-    link_pointer_ last = end_;
+    link_pointer_ first = end_link_()->next_;
+    link_pointer_ last = end_link_();
     while (first != last) {
       node_alloc_traits_::destroy(node_alloc_, first->get_adressof_value_());
       node_alloc_traits_::deallocate(node_alloc_, first->as_node_(), 1);
-      first = first->next;
+      first = first->next_;
     }
     size_ = 0;
   }
@@ -361,8 +362,8 @@ void __list_base<T, Allocator>::swap(__list_base &x) noexcept(
     alloc_traits_::is_always_equal::value) {
   // swap allocator and size
   __swap_allocator(node_alloc_, x.node_alloc_);
-  std::swap(size_, x.size_);
-  std::swap(end_, x.end_);
+  ::std::swap(size_, x.size_);
+  ::std::swap(end_, x.end_);
   if (size_ == 0)
     // if size == 0, keep next_ and prev_ pointer to node self
     end_.next_ = end_.prev_ = end_.self_();
@@ -387,10 +388,12 @@ class list : private __list_base<T, Allocator> {
   typedef typename base_::node_base_allocator_type_ node_base_allocator_type_;
   typedef typename base_::node_base_alloc_traits_ node_base_alloc_traits_;
   typedef typename base_::link_pointer_ link_pointer_;
+  typedef typename base_::node_pointer_ node_pointer_;
 
   // type for RAII to keep exception safe when constructor of value throw
-  typedef typename __allocator_destructor<node_allocator_type_> node_destructor_;
-  typedef typename unique_ptr<node_, node_destructor_> hold_pointer_;
+  typedef __allocator_destructor<node_allocator_type_>
+      node_destructor_;
+  typedef unique_ptr<node_, node_destructor_> hold_pointer_;
 
  public:
   typedef T value_type;
@@ -403,8 +406,8 @@ class list : private __list_base<T, Allocator> {
   typedef typename base_::difference_type difference_type;
   typedef typename base_::iterator iterator;
   typedef typename base_::const_iterator const_iterator;
-  typedef reverse_iterator<iterator> reverse_iterator;
-  typedef reverse_iterator<const_iterator> const_reverse_iterator;
+  typedef ::std::reverse_iterator<iterator> reverse_iterator;
+  typedef ::std::reverse_iterator<const_iterator> const_reverse_iterator;
 
   // >>> constructors
 
@@ -428,7 +431,7 @@ class list : private __list_base<T, Allocator> {
                           InputIterator>::type last);
 
   template <class InputIterator>
-  list(Iter first,
+  list(InputIterator first,
        typename enable_if<__is_input_iterator<InputIterator>::value,
                           InputIterator>::type last,
        const allocator_type &a);
@@ -436,18 +439,17 @@ class list : private __list_base<T, Allocator> {
   // copy constructor
   list(const list &x);
 
-  list(const list &, const allocator_type &a);
+  list(const list &x, const allocator_type &a);
 
   // move constructor
   list(list &&x) noexcept(is_nothrow_move_constructible<allocator_type>::value);
-  list(list &&, const allocator_type &a);
+
+  list(list &&x, const allocator_type &a);
 
   // construct with given initializer
-  list(initializer_list<value_type>);
-  list(initializer_list<value_type>, const allocator_type &a);
+  list(::std::initializer_list<value_type> init);
 
-  // destructor
-  ~list();
+  list(::std::initializer_list<value_type> init, const allocator_type &a);
 
   // >>> assignment operator
 
@@ -457,21 +459,21 @@ class list : private __list_base<T, Allocator> {
       allocator_type::propagate_on_container_move_assignment::value
           &&is_nothrow_move_assignable<allocator_type>::value);
 
-  list &operator=(initializer_list<value_type>);
+  list &operator=(::std::initializer_list<value_type>);
 
   template <class InputIterator>
-  void assign(Iter first,
+  void assign(InputIterator first,
               typename enable_if<__is_input_iterator<InputIterator>::value,
                                  InputIterator>::type last);
 
   void assign(size_type n, const value_type &t);
 
-  void assign(initializer_list<value_type>);
+  void assign(::std::initializer_list<value_type>);
 
   // >>> allocator
 
   allocator_type get_allocator() const noexcept {
-    return allcator_type(node_alloc_);
+    return allcator_type(this->node_alloc_);
   }
 
   // >>> iterator
@@ -513,46 +515,46 @@ class list : private __list_base<T, Allocator> {
   size_type size() const noexcept { return base_::size(); }
 
   size_type max_size() const noexcept {
-    return node_alloc_traits_::max_size(node_alloc_);
+    return node_alloc_traits_::max_size(this->node_alloc_);
   }
 
   // >>> element acces
 
   reference front() {
     assert(!empty());
-    return end_.next_->as_node_()->value_;
+    return this->end_link_()->next_->as_node_()->value_;
   }
 
   const_reference front() const {
     assert(!empty());
-    return end_.next_->as_node_()->value_;
+    return this->end_link_()->next_->as_node_()->value_;
   }
 
   reference back() {
     assert(!empty());
-    return end_.perv_->as_node_()->value_;
+    return this->end_link_()->prev_->as_node_()->value_;
   }
 
   const_reference back() const {
     assert(!empty());
-    return end_.perv_->as_node_()->value_;
+    return this->end_link_()->prev_->as_node_()->value_;
   }
 
   // >>> modifier
-  // front 
+  // front
   template <class... Args>
   reference emplace_front(Args &&... args);  // reference in C++17
   void pop_front();
   void push_front(const value_type &x);
   void push_front(value_type &&x);
-  
+
   // back
   template <class... Args>
   reference emplace_back(Args &&... args);  // reference in C++17
   void pop_back();
   void push_back(const value_type &x);
   void push_back(value_type &&x);
-  
+
   // insert
   template <class... Args>
   iterator emplace(const_iterator position, Args &&... args);
@@ -561,7 +563,7 @@ class list : private __list_base<T, Allocator> {
   iterator insert(const_iterator position, size_type n, const value_type &x);
   template <class Iter>
   iterator insert(const_iterator position, Iter first, Iter last);
-  iterator insert(const_iterator position, initializer_list<value_type> il);
+  iterator insert(const_iterator position, ::std::initializer_list<value_type> il);
 
   // erase
   iterator erase(const_iterator position);
@@ -603,10 +605,7 @@ class list : private __list_base<T, Allocator> {
  private:
   // >>> private auxiliary function
   // allocate a node
-  hold_pointer_ allocate_node_() {
-    node_pointer_ p = node_alloc_traits_::allocate(node_alloc_, 1);
-    return hold_pointer_(p, node_destructor_(node_alloc_, 1));
-  }
+  hold_pointer_ allocate_node_();
 
   // link nodes in ranges to pos
   void link_nodes_(link_pointer_ pos, link_pointer_ first, link_pointer_ last);
@@ -615,79 +614,164 @@ class list : private __list_base<T, Allocator> {
 
   void link_nodes_at_back_(link_pointer_ first, link_pointer_ last);
 
-  void move_assign_(list_& x, true_type)
+  void move_assign_(list &x, true_type);
 
-  void move_assign_(list& x, false_type);
-
+  void move_assign_(list &x, false_type);
 };
-template <class T, class Allcator>
-void list<T, Allocator>::link_nodes_(link_pointer_ pos, link_pointer_ first, link_pointer_ last) {
+
+template <class T, class Allocator>
+typename list<T, Allocator>::hold_pointer_ list<T, Allocator>::allocate_node_() {
+  node_pointer_ p = node_alloc_traits_::allocate(this->node_alloc_, 1);
+  return hold_pointer_(p, node_destructor_(this->node_alloc_, 1));
+}
+
+template <class T, class Allocator>
+void list<T, Allocator>::link_nodes_(link_pointer_ pos, link_pointer_ first,
+                                     link_pointer_ last) {
   pos->prev_->next_ = first;
-  first->perv_ = pos->prev_;
+  first->prev_ = pos->prev_;
   pos->prev_ = last;
   last->next_ = pos;
 }
 
 template <class T, class Allocator>
-void list<T, Allocator>::link_nodes_at_front_(link_pointer_ first, link_pointer_ last) {
-  link_nodes_(end_.next_, first, last);
+void list<T, Allocator>::link_nodes_at_front_(link_pointer_ first,
+                                              link_pointer_ last) {
+  link_nodes_(this->end_link_()->next_, first, last);
 }
 
 template <class T, class Allocator>
-void list<T, Allocator>::link_nodes_at_end_(link_pointer_ first, link_pointer_ last) {
-  link_nodes_(end_.self_(), first, last);
+void list<T, Allocator>::link_nodes_at_back_(link_pointer_ first,
+                                            link_pointer_ last) {
+  link_nodes_(this->end_link_(), first, last);
 }
 
 template <class T, class Allocator>
 list<T, Allocator>::list(size_type n) {
-
+  for (; n > 0; --n) emplace_back();
 }
 
 template <class T, class Allocator>
-list<T, Allocator>::
+list<T, Allocator>::list(size_type n, const allocator_type &a) : base_(a) {
+  for (; n > 0; --n) emplace_back();
+}
 
 template <class T, class Allocator>
-list<T, Allocator>::
-
-
-template <class T, class Allocator>
-list<T, Allocator>::
+list<T, Allocator>::list(size_type n, const value_type &value) {
+  for (; n > 0; --n) emplace_back(value);
+}
 
 template <class T, class Allocator>
-list<T, Allocator>::
+list<T, Allocator>::list(size_type n, const value_type &value,
+                         const allocator_type &a)
+    : base_(a) {
+  for (; n > 0; --n) emplace_back(value);
+}
 
 template <class T, class Allocator>
-list<T, Allocator>::
+template <class InputIterator>
+list<T, Allocator>::list(
+    InputIterator first,
+    typename enable_if<__is_input_iterator<InputIterator>::value,
+                       InputIterator>::type last) {
+  for (; first != last; ++first) emplace_back(*first);
+}
 
 template <class T, class Allocator>
-list<T, Allocator>::
+template <class InputIterator>
+list<T, Allocator>::list(
+    InputIterator first,
+    typename enable_if<__is_input_iterator<InputIterator>::value,
+                       InputIterator>::type last,
+    const allocator_type &a)
+    : base_(a) {
+  for (; first != last; ++first) emplace_back(*first);
+}
 
 template <class T, class Allocator>
-list<T, Allocator>::
+list<T, Allocator>::list(const list &x) {}
 
 template <class T, class Allocator>
-list<T, Allocator>::
+list<T, Allocator>::list(const list &x, const allocator_type &a) {}
 
 template <class T, class Allocator>
-list<T, Allocator>::
+list<T, Allocator>::list(list &&x) noexcept(is_nothrow_move_constructible<allocator_type>::value) {}
 
 template <class T, class Allocator>
-list<T, Allocator>::
+list<T, Allocator>::list(list &&x, const allocator_type &a) {}
 
+template <class T, class Allocator>
+list<T, Allocator>::list(::std::initializer_list<value_type> init) {}
+
+template <class T, class Allocator>
+list<T, Allocator>::list(::std::initializer_list<value_type> init, const allocator_type &a) {}
 
 // modifier
+// front
+template <class T, class Allocator>
+template <class... Args>
+typename list<T, Allocator>::reference list<T, Allocator>::emplace_front(
+    Args &&... args) {
+  hold_pointer_ hold_ptr = allocate_node_();
+  node_alloc_traits_::construct(this->node_alloc_, hold_ptr->get_adressof_value_(),
+                                ::std::forward<Args>(args)...);
+  link_nodes_at_front_(hold_ptr.get()->as_link_(), hold_ptr.get()->as_link_());
+  ++this->size_;
+  return hold_ptr.release()->value_;
+}
+
+template <class T, class Allocator>
+void list<T, Allocator>::push_front(const value_type &val) {
+  hold_pointer_ hold_ptr = allocate_node_();
+  node_alloc_traits_::construct(this->node_alloc_, hold_ptr->get_adressof_value_(),
+                                val);
+  link_nodes_at_front_(hold_ptr.get()->as_link_(), hold_ptr.get()->as_link_());
+  ++this->size_;
+  hold_ptr.release();
+}
+
+template <class T, class Allocator>
+void list<T, Allocator>::push_front(value_type &&val) {
+  hold_pointer_ hold_ptr = allocate_node_();
+  node_alloc_traits_::construct(this->node_alloc_, hold_ptr->get_adressof_value_(),
+                                ::std::move(val));
+  link_nodes_at_front_(hold_ptr.get()->as_link_(), hold_ptr.get()->as_link_());
+  ++this->size_;
+  hold_ptr.release();
+}
+
 // back
 template <class T, class Allocator>
+template <class... Args>
+typename list<T, Allocator>::reference list<T, Allocator>::emplace_back(
+    Args &&... args) {
+  hold_pointer_ hold_ptr = allocate_node_();
+  node_alloc_traits_::construct(this->node_alloc_, hold_ptr->get_adressof_value_(),
+                                ::std::forward<Args>(args)...);
+  link_nodes_at_back_(hold_ptr.get()->as_link_(), hold_ptr.get()->as_link_());
+  ++this->size_;
+  return hold_ptr.release()->value_;
+}
+
+template <class T, class Allocator>
 void list<T, Allocator>::push_back(const value_type &val) {
-  hold_pointer_ hold_ptr = 
+  hold_pointer_ hold_ptr = allocate_node_();
+  node_alloc_traits_::construct(this->node_alloc_, hold_ptr->get_adressof_value_(),
+                                val);
+  link_nodes_at_back_(hold_ptr.get()->as_link_(), hold_ptr.get()->as_link_());
+  ++this->size_;
+  hold_ptr.release();
 }
 
 template <class T, class Allocator>
 void list<T, Allocator>::push_back(value_type &&val) {
-
+  hold_pointer_ hold_ptr = allocate_node_();
+  node_alloc_traits_::construct(this->node_alloc_, hold_ptr->get_adressof_value_(),
+                                ::std::move(val));
+  link_nodes_at_back_(hold_ptr.get()->as_link_(), hold_ptr.get()->as_link_());
+  ++this->size_;
+  hold_ptr.release();
 }
-
-
 
 STL_END
 
