@@ -320,7 +320,7 @@ class __list_base {
     node_alloc_ = x.node_alloc_;
   }
 
-  // copy-trival for allocator.
+  // noop for allocator.
   void copy_assign_alloc_(const __list_base &x, false_type) {}
 
   // propagate_on_container_move_assignment
@@ -332,7 +332,7 @@ class __list_base {
     node_alloc_ = ::std::move(x.node_alloc_);
   }
 
-  // move-trival for allocator noexcept
+  // noop, allocator noexcept
   void move_assign_alloc_(const __list_base &x, false_type) noexcept {}
 
   // >>> data member
@@ -460,7 +460,7 @@ class list : private __list_base<T, Allocator> {
       allocator_type::propagate_on_container_move_assignment::value
           &&is_nothrow_move_assignable<allocator_type>::value);
 
-  list &operator=(::std::initializer_list<value_type>);
+  list &operator=(::std::initializer_list<value_type> init);
 
   template <class InputIterator>
   void assign(InputIterator first,
@@ -681,6 +681,21 @@ void list<T, Allocator>::link_nodes_at_back_(link_pointer_ first,
   link_nodes_(this->end_link_(), first, last);
 }
 
+template <class T, class Allocator>
+void list<T, Allocator>::move_assign_(list &x, true_type) {
+  clear();
+  base_::move_assign_alloc_(x);
+  splice(end(), x);
+}
+
+template <class T, class Allocator>
+void list<T, Allocator>::move_assign_(list &x, false_type) {
+  if(this->node_alloc_ != x.node_alloc_)
+    assign(::std::move_iterator<iterator>(x.begin()), ::std::move_iterator<iterator>(x.end()));
+  else
+    move_assign_(x, true_type());
+}
+
 
 // >>> constructor
 
@@ -775,29 +790,63 @@ list<T, Allocator>::list(::std::initializer_list<value_type> init,
 
 // >>> assignment operator
 template <class T, class Allocator>
-list<T, Allocator> &list<T, Allocator>::operator=(cosnt list &x) {}
+list<T, Allocator> &list<T, Allocator>::operator=(const list &x) {
+  // check self assignment
+  if(this != &c) {
+    base_::copy_assign_alloc_(x);
+    assign(x.begin(), x.end());
+  }
+  return *this;
+}
 
 template <class T, class Allocator>
 list<T, Allcator> &list<T, Allocator>::operator=(list &&x) noexcept(
     allocator_type::propagate_on_container_move_assignment::value
-        &&is_nothrow_move_assignable<allocator_type>::value) {}
+        &&is_nothrow_move_assignable<allocator_type>::value) {
+  move_assign_(x, integral_constant<bool, node_alloc_traits_::propagate_on_container_move_assignment::value>());
+  return *this;
+}
 
 template <class T, class Allocator>
 list<T, Allcator> &list<T, Allocator>::operator=(
-    ::std::initializer_list<value_type>) {}
+    ::std::initializer_list<value_type> init) {
+  assign(init.begin(), init.end());
+}
 
 template <class T, class Allocator>
 template <class InputIterator>
 void list<T, Allocator>::assign(
     InputIterator first,
     typename enable_if<__is_input_iterator<InputIterator>::value,
-                       InputIterator>::type last) {}
+                       InputIterator>::type last) {
+  auto iter = begin(), iter_end = end();
+  for(; iter != iter_end && first != last; ++first, ++iter)
+    *iter = *first;
+  if(first != last) {
+    for(; first != last; ++first)
+      emplace_back(*first);
+  }
+  else
+    erase(iter, iter_end);
+}
 
 template <class T, class Allocator>
-void list<T, Allocator>::assign(size_type n, const value_type &t) {}
+void list<T, Allocator>::assign(size_type n, const value_type &val) {
+  auto iter = begin(), iter_end = end();
+  for(; iter != iter_end && n > 0; --n, ++iter)
+    *iter = val;
+  if(n > 0) {
+    for(; n > 0; --n)
+      emplace_back(val);
+  }
+  else
+    erase(iter, iter_end);
+}
 
 template <class T, class Allocator>
-void list<T, Allocator>::assign(::std::initializer_list<value_type>) {}
+void list<T, Allocator>::assign(::std::initializer_list<value_type> init) {
+  assign(init.begin(), init.end());
+}
 
 template <class T, class Allocator>
 void list<T, Allocator>::swap(list &x) noexcept(allocator_traits<allocator_type>::is_always_equal::value) {}
