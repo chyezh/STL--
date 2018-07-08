@@ -84,6 +84,29 @@ void __swap_allocator(Allocator alloc1, Allocator alloc2) {
           allocator_traits<Allocator>::propagate_on_container_swap::value>());
 }
 
+// allocator destructor for RAII
+template <class Allocator>
+class __allocator_destructor {
+  typedef allocator_traits<Allocator> alloc_traits_;
+ public:
+  typedef typename alloc_traits_::pointer pointer;
+  typedef typename alloc_traits_::size_type size_type;
+
+  __allocator_destructor(Allocator& a, size_type n) : alloc_(a), size_(n) {}
+
+ void operator()(pointer pos) {
+   alloc_traits_::deallocate(alloc_, pos, size_);
+ }
+
+ private:
+  Allocator& alloc_;
+  size_type size_;
+};
+
+// smart pointer
+template <class T, class Deleter>
+using unique_ptr = std::unique_ptr<T, Deleter>;
+
 // change like pointer type to raw pointer
 template <class T>
 inline T *__to_raw_pointer(T *pointer) noexcept {
