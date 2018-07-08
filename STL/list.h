@@ -593,8 +593,6 @@ class list : private __list_base<T, Allocator> {
   void resize(size_type sz);
 
   void resize(size_type sz, const value_type &val);
-
-
   
   // >>> algorithm
   
@@ -683,6 +681,9 @@ void list<T, Allocator>::link_nodes_at_back_(link_pointer_ first,
   link_nodes_(this->end_link_(), first, last);
 }
 
+
+// >>> constructor
+
 template <class T, class Allocator>
 list<T, Allocator>::list(size_type n) {
   for (; n > 0; --n) emplace_back();
@@ -705,6 +706,7 @@ list<T, Allocator>::list(size_type n, const value_type &value,
   for (; n > 0; --n) emplace_back(value);
 }
 
+// construct with given range
 template <class T, class Allocator>
 template <class InputIterator>
 list<T, Allocator>::list(
@@ -725,25 +727,51 @@ list<T, Allocator>::list(
   for (; first != last; ++first) emplace_back(*first);
 }
 
+// copy constructor
 template <class T, class Allocator>
-list<T, Allocator>::list(const list &x) {}
+list<T, Allocator>::list(const list &x) : base_(node_alloc_traits_::select_on_container_copy_constrction(x.node_alloc_)) {
+  auto first = x.cbegin(), last = x.cend();
+  for(; first != last; ++first) emplace_back(*first);
+}
 
 template <class T, class Allocator>
-list<T, Allocator>::list(const list &x, const allocator_type &a) {}
+list<T, Allocator>::list(const list &x, const allocator_type &a) : base_(a) {
+  auto first = x.cbegin(), last = x.cend();
+  for(; first != last; ++first) emplace_back(*first);
+}
 
+// move constructor
 template <class T, class Allocator>
 list<T, Allocator>::list(list &&x) noexcept(
-    is_nothrow_move_constructible<allocator_type>::value) {}
+    is_nothrow_move_constructible<allocator_type>::value) : base_(std::move(x.node_alloc_)) {
+  // move list x to the end
+  splice(end(), x);
+}
 
 template <class T, class Allocator>
-list<T, Allocator>::list(list &&x, const allocator_type &a) {}
+list<T, Allocator>::list(list &&x, const allocator_type &a) : base_(a) {
+  if(a == x.get_allocator())
+    // move list x to the end if allocator equal
+    splice(end(), x);
+  else {
+    // else move every elements to the list and deallocate every node of x
+    assign(::std::move_iterator<iterator>(x.begin()), ::std::move_iterator<iterator>(x.end()));
+  }
+}
 
+// construct with initilaizer_list
 template <class T, class Allocator>
-list<T, Allocator>::list(::std::initializer_list<value_type> init) {}
+list<T, Allocator>::list(::std::initializer_list<value_type> init) {
+  auto first = init.begin(), last = init.cend();
+  for(; first != last; ++first) emplace_back(*first);
+}
 
 template <class T, class Allocator>
 list<T, Allocator>::list(::std::initializer_list<value_type> init,
-                         const allocator_type &a) {}
+                         const allocator_type &a) : base_(a) {
+  auto first = init.begin(), last = init.cend();
+  for(; first != last; ++first) emplace_back(*first);
+}
 
 // >>> assignment operator
 template <class T, class Allocator>
