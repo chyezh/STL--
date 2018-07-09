@@ -35,8 +35,80 @@ TEST_F(ListTest, IsEmptyInitialized) {
 
 TEST_F(ListTest, Construction) {
   stl::list<int> tc2(10);
-  stl::list<int> sc2(10);
+  std::list<int> sc2(10);
   test_range(sc2, tc2);
+  stl::list<int> tc3(10, 1);
+  std::list<int> sc3(10, 1);
+  test_range(sc3, tc3);
+  stl::list<int> tc4{1, 2, 3, 4};
+  std::list<int> sc4{1, 2, 3, 4};
+  test_range(sc4, tc4);
+  stl::list<int> tc5(tc4);
+  std::list<int> sc5(sc4);
+  test_range(sc4, tc4);
+  test_range(sc5, tc5);
+  /*
+  stl::list<int> tc6(::std::move(tc5));
+  std::list<int> sc6(::std::move(sc5));
+  test_range(sc5, tc5);
+  test_range(sc6, tc6);
+  */
+}
+
+TEST_F(ListTest, Assignment) {
+  stl::list<int> tc1{1, 2, 3, 4, 5};
+  stl::list<int> tc2{1, 2, 3};
+  std::list<int> sc1{1, 2, 3, 4, 5};
+  std::list<int> sc2{1, 2, 3};
+  tc1.assign({1});
+  sc1.assign({1});
+  test_range(sc1, tc1);
+  test_range(sc2, tc2);
+  /*
+  tc1 = ::std::move(tc2);
+  sc1 = ::std::move(sc2);
+  test_range(sc1, tc1);
+  test_range(sc2, tc2);
+  */
+}
+
+TEST_F(ListTest, InsertOperation) {
+  tc.emplace_back(1);
+  sc.emplace_back(1);
+  test_range(sc, tc);
+  tc.emplace_front(2);
+  sc.emplace_front(2);
+  test_range(sc, tc);
+  for(int i = 0; i < 5; ++i) {
+    tc.push_back(i);
+    sc.push_back(i);
+    test_range(sc, tc);
+    tc.push_front(i+1);
+    sc.push_front(i+1);
+    test_range(sc, tc);
+  }
+  auto iter_tc = tc.begin();
+  auto iter_sc = sc.begin();
+  for(int i = 0; i < 6; ++i) {
+    iter_tc++;
+    iter_sc++;
+  }
+  auto iter_tc_r = tc.insert(iter_tc, 1);
+  auto iter_sc_r = sc.insert(iter_sc, 1);
+  EXPECT_EQ(std::distance(tc.begin(), iter_tc_r), std::distance(sc.begin(), iter_sc_r));
+  test_range(sc, tc);
+  iter_tc_r = tc.emplace(iter_tc, 1);
+  iter_sc_r = sc.emplace(iter_sc, 1);
+  EXPECT_EQ(std::distance(tc.begin(), iter_tc_r), std::distance(sc.begin(), iter_sc_r));
+  test_range(sc, tc);
+  iter_tc_r = tc.insert(iter_tc, 5, 1);
+  iter_sc_r = sc.insert(iter_sc, 5, 1);
+  EXPECT_EQ(std::distance(tc.begin(), iter_tc_r), std::distance(sc.begin(), iter_sc_r));
+  test_range(sc, tc);
+  iter_tc_r = tc.insert(iter_tc, {1, 2, 3, 4, 5});
+  iter_sc_r = sc.insert(iter_sc, {1, 2, 3, 4, 5});
+  EXPECT_EQ(std::distance(tc.begin(), iter_tc_r), std::distance(sc.begin(), iter_sc_r));
+  test_range(sc, tc);
 }
 
 int main(int argc, char *argv[]) {

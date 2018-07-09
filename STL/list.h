@@ -584,7 +584,7 @@ class list : private __list_base<T, Allocator> {
   // erase
   iterator erase(const_iterator position);
 
-  iterator erase(const_iterator position, const_iterator last);
+  iterator erase(const_iterator first, const_iterator last);
   
   void clear() noexcept;
 
@@ -696,17 +696,16 @@ void list<T, Allocator>::move_assign_(list &x, false_type) {
     move_assign_(x, true_type());
 }
 
-
 // >>> constructor
 
 template <class T, class Allocator>
 list<T, Allocator>::list(size_type n) {
-  for (; n > 0; --n) emplace_back();
+  for (; n > 0; --n) emplace_back(value_type());
 }
 
 template <class T, class Allocator>
 list<T, Allocator>::list(size_type n, const allocator_type &a) : base_(a) {
-  for (; n > 0; --n) emplace_back();
+  for (; n > 0; --n) emplace_back(value_type());
 }
 
 template <class T, class Allocator>
@@ -744,7 +743,7 @@ list<T, Allocator>::list(
 
 // copy constructor
 template <class T, class Allocator>
-list<T, Allocator>::list(const list &x) : base_(node_alloc_traits_::select_on_container_copy_constrction(x.node_alloc_)) {
+list<T, Allocator>::list(const list &x) : base_(node_alloc_traits_::select_on_container_copy_construction(x.node_alloc_)) {
   auto first = x.cbegin(), last = x.cend();
   for(; first != last; ++first) emplace_back(*first);
 }
@@ -777,14 +776,14 @@ list<T, Allocator>::list(list &&x, const allocator_type &a) : base_(a) {
 // construct with initilaizer_list
 template <class T, class Allocator>
 list<T, Allocator>::list(::std::initializer_list<value_type> init) {
-  auto first = init.begin(), last = init.cend();
+  auto first = init.begin(), last = init.end();
   for(; first != last; ++first) emplace_back(*first);
 }
 
 template <class T, class Allocator>
 list<T, Allocator>::list(::std::initializer_list<value_type> init,
                          const allocator_type &a) : base_(a) {
-  auto first = init.begin(), last = init.cend();
+  auto first = init.begin(), last = init.end();
   for(; first != last; ++first) emplace_back(*first);
 }
 
@@ -928,7 +927,7 @@ template <class... Args>
 typename list<T, Allocator>::iterator list<T, Allocator>::emplace(const_iterator position, Args &&... args) {
   hold_pointer_ hold_ptr = allocate_node_();
   node_alloc_traits_::construct(this->node_alloc_, hold_ptr->get_adressof_value_(), ::std::forward<Args>(args)...);
-  link_nodes_at_(position, hold_ptr.get()->as_link_(), hold_ptr.get()->as_link_());
+  link_nodes_at_(position.ptr_, hold_ptr.get()->as_link_(), hold_ptr.get()->as_link_());
   ++this->size_;
   return iterator(hold_ptr.release()->as_link_());
 }
@@ -937,7 +936,7 @@ template <class T, class Allocator>
 typename list<T, Allocator>::iterator list<T, Allocator>::insert(const_iterator position, const value_type &val) {
   hold_pointer_ hold_ptr = allocate_node_();
   node_alloc_traits_::construct(this->node_alloc_, hold_ptr->get_adressof_value_(), val);
-  link_nodes_at_(position, hold_ptr.get()->as_link_(), hold_ptr.get()->as_link_());
+  link_nodes_at_(position.ptr_, hold_ptr.get()->as_link_(), hold_ptr.get()->as_link_());
   ++this->size_;
   return iterator(hold_ptr.release()->as_link_());
 }
@@ -946,7 +945,7 @@ template <class T, class Allocator>
 typename list<T, Allocator>::iterator list<T, Allocator>::insert(const_iterator position, value_type &&val) {
   hold_pointer_ hold_ptr = allocate_node_();
   node_alloc_traits_::construct(this->node_alloc_, hold_ptr->get_adressof_value_(), ::std::move(val));
-  link_nodes_at_(position, hold_ptr.get()->as_link_(), hold_ptr.get()->as_link_());
+  link_nodes_at_(position.ptr_, hold_ptr.get()->as_link_(), hold_ptr.get()->as_link_());
   ++this->size_;
   return iterator(hold_ptr.release()->as_link_());
 }
@@ -954,32 +953,39 @@ typename list<T, Allocator>::iterator list<T, Allocator>::insert(const_iterator 
 template <class T, class Allocator>
 typename list<T, Allocator>::iterator list<T, Allocator>::insert(const_iterator position, size_type n, const value_type &val) {
   if(n > 0) {
+    // 
     hold_pointer_ hold_ptr = allocate_node_();
     node_alloc_traits_::construct(this->node_alloc_, hold_ptr->get_adressof_value_(), val);
     size_type num_to_insert = n - 1;
     node_pointer_ hold_end = hold_ptr.get();
     try {
+      // create the node list
       for(; num_to_insert > 0; --num_to_insert) {
         node_pointer_ p = node_alloc_traits_::allocate(this->node_alloc_, 1);
+        // may throw
         node_alloc_traits_::construct(this->node_alloc_, p->get_adressof_value_(), val);
-        p->prev_ = hold_end;
-        hold_end->next_ = p;
+        p->prev_ = hold_end->as_link_();
+        hold_end->next_ = p->as_link_();
         hold_end = p;
       }
-      link_nodes_at_(position, hold_ptr.get()->as_link_(), hold_end);
     } catch(...) {
+      // destroy the element already construct and deallocate the space without hold
       for(;hold_end != hold_ptr.get();) {
         node_pointer_ to_destroy = hold_end; 
+        hold_end = hold_end->prev_->as_node_();
         node_alloc_traits_::destroy(this->node_alloc_, to_destroy->get_adressof_value_());
-        node_alloc_traits_::deallocate(this->allocate_node_, to_destroy, 1);
+        node_alloc_traits_::deallocate(this->node_alloc_, to_destroy, 1);
       }
-      node_alloc_traits_::destroy(this->node_alloc_, hold_ptr->get()->get_adressof_value_());
+      node_alloc_traits_::destroy(this->node_alloc_, hold_ptr->get_adressof_value_());
       throw;
     }
-    link_nodes_at_(position, hold_ptr.get(), hold_end);
+    // link the nodes list and add size
+    link_nodes_at_(position.ptr_, hold_ptr.get()->as_link_(), hold_end->as_link_());
     this->size_ += n;
+    // return the first insert position and release the hold_ptr
     return iterator(hold_ptr.release()->as_link_());
   }
+  // if n == 0, return position
   return iterator(position.ptr_);
 }
 
@@ -994,24 +1000,27 @@ typename list<T, Allocator>::iterator list<T, Allocator>::insert(const_iterator 
     node_pointer_ hold_end = hold_ptr.get();
     size_type num_already_insert = 1;
     try {
+      // create node list
       for(; first != last; ++first, ++num_already_insert) {
         node_pointer_ p = node_alloc_traits_::allocate(this->node_alloc_, 1);
+        // may throw
         node_alloc_traits_::construct(this->node_alloc_, p->get_adressof_value_(), *first);
-        p->prev_ = hold_end;
-        hold_end->next_ = p;
+        p->prev_ = hold_end->as_link_();
+        hold_end->next_ = p->as_link_();
         hold_end = p;
       }
-      link_nodes_at_(position, hold_ptr.get()->as_link_(), hold_end);
     } catch(...) {
+
       for(;hold_end != hold_ptr.get();) {
-        node_pointer_ to_destroy = hold_end; 
+        node_pointer_ to_destroy = hold_end;
+        hold_end = hold_end->prev_->as_node_();
         node_alloc_traits_::destroy(this->node_alloc_, to_destroy->get_adressof_value_());
-        node_alloc_traits_::deallocate(this->allocate_node_, to_destroy, 1);
+        node_alloc_traits_::deallocate(this->node_alloc_, to_destroy, 1);
       }
-      node_alloc_traits_::destroy(this->node_alloc_, hold_ptr->get()->get_adressof_value_());
+      node_alloc_traits_::destroy(this->node_alloc_, hold_ptr->get_adressof_value_());
       throw;
     }
-    link_nodes_at_(position, hold_ptr.get(), hold_end);
+    link_nodes_at_(position.ptr_, hold_ptr.get()->as_link_(), hold_end->as_link_());
     this->size_ += num_already_insert;
     return iterator(hold_ptr.release()->as_link_());
   }
@@ -1026,14 +1035,33 @@ typename list<T, Allocator>::iterator list<T, Allocator>::insert(const_iterator 
 
 // erase
 template <class T, class Allocator>
-typename list<T, Allocator>::iterator list<T, Allocator>::erase(const_iterator position) {}
+typename list<T, Allocator>::iterator list<T, Allocator>::erase(const_iterator position) {
+  position.ptr_->prev_->next_ = position.ptr_->next_;
+  position.ptr_->next_->prev_ = position.ptr_->prev_;
+  iterator return_pos = iterator(position.ptr_->next_);
+  node_alloc_traits_::destroy(this->node_alloc_, position.ptr_->get_adressof_value_());
+  node_alloc_traits_::deallocate(this->node_alloc_, position.ptr_->as_node_(), 1);
+  --this->size_;
+  return return_pos;
+}
 
 template <class T, class Allocator>
-typename list<T, Allocator>::iterator list<T, Allocator>::erase(const_iterator position, const_iterator last) {}
-
+typename list<T, Allocator>::iterator list<T, Allocator>::erase(const_iterator first, const_iterator last) {
+  first.ptr_->prev_->next_ = last.ptr_;
+  last.ptr_->prev_ = first.ptr_->prev_;
+  size_type num_to_destroy = 0;
+  for(; first != last; ++num_to_destroy) {
+    const_iterator to_destroy = first;
+    ++first;
+    node_alloc_traits_::destroy(this->node_alloc_, to_destroy.ptr_->get_adressof_value_());
+    node_alloc_traits_::deallocate(this->node_alloc_, to_destroy.ptr_->as_node_(), 1);
+  }
+  this->size_ -= num_to_destroy;
+  return iterator(last.ptr_);
+}
 
 template <class T, class Allocator>
-void list<T, Allocator>::clear() noexcept {}
+void list<T, Allocator>::clear() noexcept { base_::clear(); }
 
 // >>> size
 template <class T, class Allocator>
