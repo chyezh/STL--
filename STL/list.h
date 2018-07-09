@@ -1162,14 +1162,40 @@ void list<T, Allocator>::splice(const_iterator position, list &&x, const_iterato
 }
 
 template <class T, class Allocator>
-void list<T, Allocator>::unique() {}
+void list<T, Allocator>::unique() {
+  iterator iter_first = begin(), iter_last = end();
+  for(;iter_first != iter_last;) {
+    auto iter = std::next(iter_first);
+    for(;iter != iter_last && *iter_first == *iter; ++iter)
+      ;
+    iter_first = erase(std::next(iter_first), iter);
+  }
+}
 
 template <class T, class Allocator>
 template <class BinaryPredicate>
-void list<T, Allocator>::unique(BinaryPredicate binary_pred) {}
+void list<T, Allocator>::unique(BinaryPredicate binary_pred) {
+  iterator iter_first = begin(), iter_last = end();
+  for(;iter_first != iter_last;) {
+    auto iter = ::std::next(iter_first);
+    for(;iter != iter_last && binary_pred(*iter_first, *iter); ++iter)
+      ;
+    iter_first = erase(::std::next(iter_first), iter);
+  }
+}
 
 template <class T, class Allocator>
-void list<T, Allocator>::merge(list &x) {}
+void list<T, Allocator>::merge(list &x) {
+  iterator iter_pos = begin(), iter_last = end();
+  iterator iter_to_merge_first = x.begin(), iter_to_merge_last = x.end();
+  for(;iter_pos != iter_last;) {
+    if(*iter_to_merge_first <= *iter_pos) {
+      auto iter_to_merge_iter = ::std::next(iter_to_merge_first);
+      for(;iter_to_merge_iter != iter_to_merge_last && *iter_to_merge_iter <= *iter_pos; ++iter_to_merge_iter)
+        ;
+    }
+  }
+}
 
 template <class T, class Allocator>
 void list<T, Allocator>::merge(list &&x) {}

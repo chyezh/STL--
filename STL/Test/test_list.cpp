@@ -130,6 +130,28 @@ TEST_F(ListTest, InsertOperation) {
   test_range(sc, tc);
 }
 
+TEST_F(ListTest, AlgorithmOperation) {
+  tc = {1,2,3,3,4,4,5,6,6,7};
+  sc.assign(tc.begin(), tc.end());
+  test_range(sc, tc);
+  tc.unique();
+  sc.unique();
+  test_range(sc, tc);
+  tc = {1,2,3,3,4,4,5,6,6,7};
+  sc.assign(tc.begin(), tc.end());
+  tc.unique([](int l, int r) { return r - l == 1; });
+  sc.unique([](int l, int r) { return r - l == 1; });
+  for(auto&& i : tc) {
+    std::cout << i << ' ';
+  }
+  std::cout << std::endl;
+  for(auto&& i : sc) {
+    std::cout << i << ' ';
+  }
+  std::cout << std::endl;
+  test_range(sc, tc);
+}
+
 int main(int argc, char *argv[]) {
   ::testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();
