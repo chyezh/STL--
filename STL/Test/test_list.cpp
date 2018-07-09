@@ -47,12 +47,33 @@ TEST_F(ListTest, Construction) {
   std::list<int> sc5(sc4);
   test_range(sc4, tc4);
   test_range(sc5, tc5);
-  /*
   stl::list<int> tc6(::std::move(tc5));
   std::list<int> sc6(::std::move(sc5));
   test_range(sc5, tc5);
   test_range(sc6, tc6);
-  */
+}
+
+TEST_F(ListTest, EraseOperation) {
+  tc.clear();
+  sc.clear();
+  test_range(tc, sc);
+  tc = {1, 2, 3, 4, 5, 6, 4};
+  sc = {1, 2, 3, 4, 5, 6, 4};
+  test_range(tc, sc);
+  auto iter_tc = tc.erase(tc.begin());
+  auto iter_sc = sc.erase(sc.begin());
+  EXPECT_EQ(*iter_tc, *iter_sc);
+  test_range(tc, sc);
+  tc.remove(4);
+  sc.remove(4);
+  test_range(tc, sc);
+  tc.remove_if([](int i){ return i == 5; });
+  sc.remove_if([](int i){ return i == 5; });
+  test_range(tc, sc);
+  iter_tc = tc.erase(iter_tc, tc.end());
+  iter_sc = sc.erase(iter_sc, sc.end());
+  EXPECT_EQ(*iter_tc, *iter_sc);
+  test_range(tc, sc);
 }
 
 TEST_F(ListTest, Assignment) {
@@ -64,12 +85,10 @@ TEST_F(ListTest, Assignment) {
   sc1.assign({1});
   test_range(sc1, tc1);
   test_range(sc2, tc2);
-  /*
   tc1 = ::std::move(tc2);
   sc1 = ::std::move(sc2);
   test_range(sc1, tc1);
   test_range(sc2, tc2);
-  */
 }
 
 TEST_F(ListTest, InsertOperation) {
