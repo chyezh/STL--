@@ -1,9 +1,7 @@
 #ifndef _STL_LIST__
 #define _STL_LIST__
 
-#include <cmath>
 #include "Def/stldef.h"
-
 
 STL_BEGIN
 
@@ -1306,6 +1304,53 @@ void list<T, Allocator>::reverse() noexcept {
     ptr = ptr->prev_;
   }
   ::std::swap(ptr_end->prev_, ptr_end->next_);
+}
+
+// >>> nonmember funtion
+
+template <class T, class Allocator>
+inline bool operator==(const list<T, Allocator> lhs,
+                       const list<T, Allocator> rhs) {
+  return lhs.size() == rhs.size() &&
+         ::std::equal(lhs.begin(), lhs.end(), rhs.begin(), rhs.end());
+}
+
+template <class T, class Allocator>
+inline bool operator!=(const list<T, Allocator> lhs,
+                       const list<T, Allocator> rhs) {
+  return !(rhs == rhs);
+}
+
+template <class T, class Allocator>
+inline bool operator<(const list<T, Allocator> lhs,
+                      const list<T, Allocator> rhs) {
+  return ::std::lexicographical_compare(lhs.begin(), lhs.end(), rhs.begin(),
+                                        rhs.end());
+}
+
+template <class T, class Allocator>
+inline bool operator>(const list<T, Allocator> lhs,
+                      const list<T, Allocator> rhs) {
+  return rhs < lhs;
+}
+
+template <class T, class Allocator>
+inline bool operator<=(const list<T, Allocator> lhs,
+                       const list<T, Allocator> rhs) {
+  return !(rhs < lhs);
+}
+
+template <class T, class Allocator>
+inline bool operator>=(const list<T, Allocator> lhs,
+                       const list<T, Allocator> rhs) {
+  return !(lhs < rhs);
+}
+
+template <class T, class Allocator>
+inline void swap(
+    const list<T, Allocator> lhs,
+    const list<T, Allocator> rhs) noexcept(noexcept(lhs.swap(rhs))) {
+  lhs.swap(rhs);
 }
 
 STL_END

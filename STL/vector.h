@@ -1291,6 +1291,55 @@ void vector<T, Allocator>::swap(vector &x) noexcept(
   __swap_allocator(this->alloc_, x.alloc_);
 }
 
+// >>> nonmember funtion
+
+// lexicographical comparation
+template <class T, class Allocator>
+inline bool operator==(const vector<T, Allocator> lhs,
+                       const vector<T, Allocator> rhs) {
+  return lhs.size() == rhs.size() &&
+         ::std::equal(lhs.begin(), lhs.end(), rhs.begin(), rhs.end());
+}
+
+template <class T, class Allocator>
+inline bool operator!=(const vector<T, Allocator> lhs,
+                       const vector<T, Allocator> rhs) {
+  return !(rhs == rhs);
+}
+
+template <class T, class Allocator>
+inline bool operator<(const vector<T, Allocator> lhs,
+                      const vector<T, Allocator> rhs) {
+  return ::std::lexicographical_compare(lhs.begin(), lhs.end(), rhs.begin(),
+                                        rhs.end());
+}
+
+template <class T, class Allocator>
+inline bool operator>(const vector<T, Allocator> lhs,
+                      const vector<T, Allocator> rhs) {
+  return rhs < lhs;
+}
+
+template <class T, class Allocator>
+inline bool operator<=(const vector<T, Allocator> lhs,
+                       const vector<T, Allocator> rhs) {
+  return !(rhs < lhs);
+}
+
+template <class T, class Allocator>
+inline bool operator>=(const vector<T, Allocator> lhs,
+                       const vector<T, Allocator> rhs) {
+  return !(lhs < rhs);
+}
+
+// swap fucntion
+template <class T, class Allocator>
+inline void swap(
+    const vector<T, Allocator> lhs,
+    const vector<T, Allocator> rhs) noexcept(noexcept(lhs.swap(rhs))) {
+  lhs.swap(rhs);
+}
+
 STL_END
 
 #endif  // !STL_VECTOR__
