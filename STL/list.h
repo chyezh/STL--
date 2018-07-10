@@ -160,7 +160,7 @@ class __list_const_iterator {
   friend class __list_base;
 
  public:
-  // bidirectional iterator interface
+  // iterator interface
   reference operator*() const { return ptr_->as_node_()->value_; }
 
   pointer operator->() const {
@@ -178,6 +178,7 @@ class __list_const_iterator {
     return old_iter;
   }
 
+  // bidirectional iterator interface
   __list_const_iterator &operator--() {
     ptr_ = ptr_->prev_;
     return *this;
@@ -189,6 +190,7 @@ class __list_const_iterator {
     return old_iter;
   }
 
+  // iterator comparation
   friend bool operator==(const __list_const_iterator &lhs,
                          const __list_const_iterator &rhs) {
     return lhs.ptr_ == rhs.ptr_;
@@ -696,6 +698,7 @@ void list<T, Allocator>::move_assign_(list &x, true_type) {
 template <class T, class Allocator>
 void list<T, Allocator>::move_assign_(list &x, false_type) {
   if (this->node_alloc_ != x.node_alloc_)
+    // if node_alloc_ != x.node_alloc , result in member-wise move
     assign(::std::move_iterator<iterator>(x.begin()),
            ::std::move_iterator<iterator>(x.end()));
   else
@@ -777,7 +780,7 @@ list<T, Allocator>::list(list &&x, const allocator_type &a) : base_(a) {
     // move list x to the end if allocator equal
     splice(end(), x);
   else {
-    // else move every elements to the list and deallocate every node of x
+    // if a != x.node_alloc_, result in member-wise move
     assign(::std::move_iterator<iterator>(x.begin()),
            ::std::move_iterator<iterator>(x.end()));
   }
