@@ -169,6 +169,12 @@ struct __is_random_access_iterator
     : public __has_iterator_category_convertible_to<
           T, random_access_iterator_tag> {};
 
+template <class T1, class T2>
+using pair = ::std::pair<T1, T2>;
+
+template <class T>
+using initializer_list = ::std::initializer_list<T>;
+
 STL_END
 
 #endif  // !_STLDEF_H__
