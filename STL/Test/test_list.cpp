@@ -14,6 +14,13 @@ void test_range(const C1 &c1, const C2 &c2) {
   EXPECT_EQ(iter2, c2.end());
 }
 
+template <typename C>
+void print_container(const C& c) {
+  for(auto&& i : c)
+    std::cout << i << ' ';
+  std::cout << std::endl;
+}
+
 class ListTest : public ::testing::Test {
  protected:
   virtual void SetUp() {
@@ -141,15 +148,37 @@ TEST_F(ListTest, AlgorithmOperation) {
   sc.assign(tc.begin(), tc.end());
   tc.unique([](int l, int r) { return r - l == 1; });
   sc.unique([](int l, int r) { return r - l == 1; });
-  for(auto&& i : tc) {
-    std::cout << i << ' ';
-  }
-  std::cout << std::endl;
-  for(auto&& i : sc) {
-    std::cout << i << ' ';
-  }
-  std::cout << std::endl;
   test_range(sc, tc);
+  stl::list<int> tc1{1,3,6,8,10};
+  std::list<int> sc1 {tc1.begin(), tc1.end()};
+  stl::list<int> tc2{1,2,4,8,9,10,11};
+  std::list<int> sc2(tc2.begin(), tc2.end());
+  tc1.merge(tc2);
+  sc1.merge(sc2);
+  test_range(sc1, tc1);
+  test_range(sc2, tc2);
+  stl::list<int> tc3{2, 3, 4, 5, 6, 10};
+  std::list<int> sc3(tc3.begin(), tc3.end());
+  tc1.merge(tc3);
+  sc1.merge(sc3);
+  test_range(sc1, tc1);
+  test_range(sc3, tc3);
+  tc1 = {10,5,5,3,2,1};
+  tc2 = {11,8,6,6,3,3,2,1};
+  sc1.assign(tc1.begin(), tc1.end());
+  sc2.assign(tc2.begin(),  tc2.end());
+  tc1.merge(tc2, std::greater<int>());
+  sc1.merge(sc2, std::greater<int>());
+  test_range(sc1, tc1);
+  test_range(sc2, tc2);
+  tc1 = {1,2,4,1,5,4,12,3,5,3,6,7,5};
+  sc1.assign(tc1.begin(), tc1.end());
+  tc1.sort();
+  sc1.sort();
+  test_range(sc1, tc1);
+  tc1.reverse();
+  sc1.reverse();
+  test_range(sc1, tc1);
 }
 
 int main(int argc, char *argv[]) {
