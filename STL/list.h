@@ -259,7 +259,7 @@ class __list_base {
   __list_base &operator=(const __list_base &) = delete;
 
   // construct with given node allocator
-  __list_base(const allocator_type &alloc) : size_(0), node_alloc_(alloc) {}
+  explicit __list_base(const allocator_type &alloc) : size_(0), node_alloc_(alloc) {}
 
   // >>> destructor
   ~__list_base() { clear(); }

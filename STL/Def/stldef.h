@@ -12,6 +12,8 @@
 
 #define STL_BEGIN namespace stl {
 #define STL_END }
+#define STL_NAME stl
+
 
 STL_BEGIN
 

@@ -25,6 +25,9 @@ class __vector_base {
   typedef ::std::reverse_iterator<iterator> reverse_iterator;
   typedef ::std::reverse_iterator<const_iterator> const_reverse_iterator;
 
+ private:
+   __vector_base(const __vector_base &x) = delete;
+   __vector_base &operator=(const __vector_base &x) = delete;
  protected:
   // >>> constructor
   // default constructor
@@ -36,7 +39,7 @@ class __vector_base {
         alloc_(allocator_type()) {}
 
   // constructor with given allocator
-  __vector_base(const allocator_type &alloc) noexcept
+  explicit __vector_base(const allocator_type &alloc) noexcept
       : begin_(nullptr), end_(nullptr), cap_(nullptr), alloc_(alloc) {}
 
   // >>> destructor.
@@ -75,7 +78,7 @@ class __vector_base {
   }
 
   // move assignment for allocator
-  void move_assign_alloc_(const __vector_base &x) noexcept(
+  void move_assign_alloc_(__vector_base &x) noexcept(
       !alloc_traits_::propagate_on_container_move_assignment::value ||
       ::std::is_nothrow_move_assignable<allocator_type>::value) {
     move_assign_alloc_(
@@ -104,14 +107,14 @@ class __vector_base {
   // propagate_on_container_move_assignment
   // allocator need to be moved when container is move-assigned
   // noexcept if allocator is nothrow move assignable
-  void move_assign_alloc_(const __vector_base &x, true_type) noexcept(
+  void move_assign_alloc_(__vector_base &x, true_type) noexcept(
       ::std::is_nothrow_move_assignable<allocator_type>::value) {
     clear();
     alloc_ = ::std::move(x.alloc_);
   }
 
   // move-trival for allocator noexcept
-  void move_assign_alloc_(const __vector_base &x, false_type) noexcept {}
+  void move_assign_alloc_(__vector_base &x, false_type) noexcept {}
 
  protected:
   // >>> data member
