@@ -113,8 +113,7 @@ struct __split_buffer {
 
   void clear() noexcept { destruct_at_end_(begin_); }
 
-  void swap(__split_buffer &x) noexcept(!alloc_traits_::propagate_on_container_swap::value
-                                        /* || std::is_nothrow_swappable<allocator_remove_reference_type_>::value */);
+  void swap(__split_buffer &x) noexcept;
 
   // >>> auxiliary function
 
@@ -336,8 +335,7 @@ __split_buffer<T, Allocator> &__split_buffer<T, Allocator>::operator=(
 }
 
 template <class T, class Allocator>
-void __split_buffer<T, Allocator>::swap(__split_buffer &x) noexcept(!alloc_traits_::propagate_on_container_swap::value
-                                                                    /* || std::is_nothrow_swappable<allocator_remove_reference_type_>::value */)
+void __split_buffer<T, Allocator>::swap(__split_buffer &x) noexcept
 {
   std::swap(this->storage_, x.storage_);
   std::swap(this->begin_, x.begin_);
