@@ -546,6 +546,7 @@ class deque : private __deque_base<T, Allocator> {
   typedef typename base_::pointer_alloc_traits_ pointer_alloc_traits_;
   typedef typename base_::map_type_ map_type_;
   typedef typename base_::deque_block_size_ deque_block_size_;
+  typedef typename base_::map_iter_ map_iter_;
 
  public:
   // >>> member types
@@ -807,13 +808,13 @@ class deque : private __deque_base<T, Allocator> {
 
   void pop_back();
 
-  iterator erase(const_iterator p);
+  iterator erase(const_iterator pos);
 
-  iterator erase(const_iterator f, const_iterator l);
+  iterator erase(const_iterator first, const_iterator last);
 
   void clear() noexcept;
 
-  void swap(deque &c) noexcept(alloc_traits_::is_always_equal::value);
+  void swap(deque &x) noexcept(alloc_traits_::is_always_equal::value);
 
  private:
   // >>> private auxiliary function
@@ -822,6 +823,16 @@ class deque : private __deque_base<T, Allocator> {
 
   // throw out of range error
   void throw_out_of_range_() const { throw ::std::out_of_range("vector"); }
+
+  // return the rest front space of deque
+  size_type front_spare_() const { return this->start_; }
+
+  // return the rest back space of deque
+  size_type back_spare_() const { 
+    // for keeping map_iter_ of end() vaild, keep a position in the last slot.
+    return this->block_size_() * this->map_.size() - 1 - front_spare_() - size();
+  }
+
 };
 
 // >>> constructor
