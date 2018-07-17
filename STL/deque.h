@@ -527,7 +527,7 @@ template <class T, class Allocator>
 void __deque_base<T, Allocator>::clear() noexcept {
   // destroy all element
   for (iterator first = begin(), last = end(); first != last; ++first)
-    alloc_traits_::destroy(alloc_, ::std::addressof(*first));
+    alloc_traits_::destroy(alloc_, first.ptr_);
   size_ = 0;
   // release additional block
   for (; map_.size() > 1;) {
@@ -586,7 +586,7 @@ class deque : private __deque_base<T, Allocator> {
 
   deque(size_type n, const value_type &val, const allocator_type &alloc);
 
-  // constructo with given range
+  // constructor with given range
   // if const iterator is input iterator
   template <class InputIterator>
   deque(InputIterator first,
@@ -635,13 +635,13 @@ class deque : private __deque_base<T, Allocator> {
   deque(deque &&x) noexcept(
       is_nothrow_move_constructible<allocator_type>::value);
 
-  deque(initializer_list<value_type> init);
-
-  deque(initializer_list<value_type> init, const allocator_type &alloc);
-
   deque(const deque &x, const allocator_type &alloc);
 
   deque(deque &&x, const allocator_type &alloc);
+
+  deque(initializer_list<value_type> init);
+
+  deque(initializer_list<value_type> init, const allocator_type &alloc);
 
   // >>> destructor
   ~deque() {}
@@ -859,9 +859,31 @@ class deque : private __deque_base<T, Allocator> {
 
   void alloc_back_(size_type n);
 
-  
+  // append operation
+  void append_(size_type n);
 
-  
+  void append_(size_type n, const value_type &val);
+
+  template <class InputIterator>
+  void append_(
+      InputIterator first,
+      typename enable_if<
+          __is_input_iterator<InputIterator>::value &&
+              !__is_forward_iterator<InputIterator>::value &&
+              is_constructible<
+                  value_type,
+                  typename iterator_traits<InputIterator>::reference>::value,
+          InputIterator>::type last);
+
+  template <class ForwardIterator>
+  void append_(
+      ForwardIterator first,
+      typename enable_if<
+          __is_forward_iterator<ForwardIterator>::value &&
+              is_constructible<
+                  value_type,
+                  typename iterator_traits<ForwardIterator>::reference>::value,
+          ForwardIterator>::type);
 };
 
 // >>> private auxiliary function
@@ -1079,22 +1101,77 @@ void deque<T, Allocator>::alloc_back_(size_type n) {
   }
 }
 
+// append operation
+template <class T, class Allocator>
+void deque<T, Allocator>::append_(size_type n) {
+  if (back_spare_() < n) alloc_back_(n - back_spare_());
+  for (iterator iter = end(); n > 0; ++iter, --n, ++this->size_)
+    alloc_traits_::construct(this->alloc_, iter.ptr_);
+}
+
+template <class T, class Allocator>
+void deque<T, Allocator>::append_(size_type n, const value_type &val) {
+  if (back_spare_() < n) alloc_back_(n - back_spare_());
+  for (iterator iter = end(); n > 0; ++iter, --n, ++this->size_)
+    alloc_traits_::construct(this->alloc_, iter.ptr_, val);
+}
+
+template <class T, class Allocator>
+template <class InputIterator>
+void deque<T, Allocator>::append_(
+    InputIterator first,
+    typename enable_if<
+        __is_input_iterator<InputIterator>::value &&
+            !__is_forward_iterator<InputIterator>::value &&
+            is_constructible<value_type, typename iterator_traits<
+                                             InputIterator>::reference>::value,
+        InputIterator>::type last) {
+  for (; first != last; ++first) emplace_back(*first);
+}
+
+template <class T, class Allocator>
+template <class ForwardIterator>
+void deque<T, Allocator>::append_(
+    ForwardIterator first,
+    typename enable_if<
+        __is_forward_iterator<ForwardIterator>::value &&
+            is_constructible<
+                value_type,
+                typename iterator_traits<ForwardIterator>::reference>::value,
+        ForwardIterator>::type last) {
+  typename iterator_traits<ForwardIterator>::difference_type n =
+      ::std::distance(first, last);
+  if (back_spare_() < n) alloc_back_(n - back_spare_());
+  for (iterator iter = end(); first != last; ++iter, ++first, ++this->size_)
+    alloc_traits_::construct(this->alloc_, iter.ptr_, *first);
+}
+
 // >>> constructor
 // constructor with given size and value
 template <class T, class Allocator>
-deque<T, Allocator>::deque(size_type n);
+deque<T, Allocator>::deque(size_type n) {
+  append_(n);
+}
 
 template <class T, class Allocator>
-deque<T, Allocator>::deque(size_type n, const allocator_type &alloc);
+deque<T, Allocator>::deque(size_type n, const allocator_type &alloc)
+    : base_(alloc) {
+  append_(n);
+}
 
 template <class T, class Allocator>
-deque<T, Allocator>::deque(size_type n, const value_type &val);
+deque<T, Allocator>::deque(size_type n, const value_type &val) {
+  append_(n, val);
+}
 
 template <class T, class Allocator>
 deque<T, Allocator>::deque(size_type n, const value_type &val,
-                           const allocator_type &alloc);
+                           const allocator_type &alloc)
+    : base_(alloc) {
+  append_(n, val);
+}
 
-// constructo with given range
+// constructor with given range
 // if const iterator is input iterator
 template <class T, class Allocator>
 template <class InputIterator>
@@ -1105,7 +1182,9 @@ deque<T, Allocator>::deque(
             !__is_forward_iterator<InputIterator>::value &&
             is_constructible<value_type, typename iterator_traits<
                                              InputIterator>::reference>::value,
-        InputIterator>::type last);
+        InputIterator>::type last) {
+  append_(first, last);
+}
 
 template <class T, class Allocator>
 template <class InputIterator>
@@ -1117,54 +1196,78 @@ deque<T, Allocator>::deque(
             is_constructible<value_type, typename iterator_traits<
                                              InputIterator>::reference>::value,
         InputIterator>::type last,
-    const allocator_type &alloc);
+    const allocator_type &alloc)
+    : base_(alloc) {
+  append_(first, last);
+}
 
 template <class T, class Allocator>
 template <class ForwardIterator>
 deque<T, Allocator>::deque(
     ForwardIterator first,
     typename enable_if<
-        __is_input_iterator<ForwardIterator>::value &&
-            !__is_forward_iterator<ForwardIterator>::value &&
+        __is_forward_iterator<ForwardIterator>::value &&
             is_constructible<
                 value_type,
                 typename iterator_traits<ForwardIterator>::reference>::value,
-        ForwardIterator>::type last);
+        ForwardIterator>::type last) {
+  append_(first, last);
+}
 
 template <class T, class Allocator>
 template <class ForwardIterator>
 deque<T, Allocator>::deque(
     ForwardIterator first,
     typename enable_if<
-        __is_input_iterator<ForwardIterator>::value &&
-            !__is_forward_iterator<ForwardIterator>::value &&
+        __is_forward_iterator<ForwardIterator>::value &&
             is_constructible<
                 value_type,
                 typename iterator_traits<ForwardIterator>::reference>::value,
         ForwardIterator>::type last,
-    const allocator_type &alloc);
+    const allocator_type &alloc)
+    : base_(alloc) {
+  append_(first, last);
+}
 
 template <class T, class Allocator>
-deque<T, Allocator>::deque(const deque &x);
+deque<T, Allocator>::deque(const deque &x)
+    : base_(alloc_traits_::select_on_container_copy_construction(x.alloc_)) {
+  append_(x.begin(), x.end());
+}
 
 template <class T, class Allocator>
 deque<T, Allocator>::deque(deque &&x) noexcept(
-    is_nothrow_move_constructible<allocator_type>::value);
+    is_nothrow_move_constructible<allocator_type>::value)
+    : base_(::std::move(x)) {}
 
 template <class T, class Allocator>
-deque<T, Allocator>::deque(initializer_list<value_type> init);
+deque<T, Allocator>::deque(const deque &x, const allocator_type &alloc)
+    : base_(alloc) {
+  append_(x.begin(), x.end());
+}
+
+template <class T, class Allocator>
+deque<T, Allocator>::deque(deque &&x, const allocator_type &alloc)
+    : base_(::std::move(x), alloc) {
+  if (this->alloc_ != x.alloc) {
+    append_(::std::move_iterator<iterator>(x.begin()),
+            ::std::move_iterator<iterator>(x.begin()));
+  }
+}
+
+template <class T, class Allocator>
+deque<T, Allocator>::deque(initializer_list<value_type> init) {
+  append_(init.begin(), init.end());
+}
 
 template <class T, class Allocator>
 deque<T, Allocator>::deque(initializer_list<value_type> init,
-                           const allocator_type &alloc);
+                           const allocator_type &alloc)
+    : base_(alloc) {
+  append_(init.begin(), init.end());
+}
 
-template <class T, class Allocator>
-deque<T, Allocator>::deque(const deque &x, const allocator_type &alloc);
-
-template <class T, class Allocator>
-deque<T, Allocator>::deque(deque &&x, const allocator_type &alloc);
-
-// >>> assignment operation
+// >>> assignment operation 
 template <class T, class Allocator>
 deque<T, Allocator> &deque<T, Allocator>::operator=(const deque &x);
 
@@ -1176,7 +1279,6 @@ deque<T, Allocator> &deque<T, Allocator>::operator=(deque &&x) noexcept(
 template <class T, class Allocator>
 deque<T, Allocator> &deque<T, Allocator>::operator=(
     initializer_list<value_type> init) {
-  assign(init.begin(), init.end());
 }
 
 template <class T, class Allocator>

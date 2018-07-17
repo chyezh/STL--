@@ -488,7 +488,7 @@ class vector : private __vector_base<T, Allocator> {
 // postconditon: capacity() = n; size() = 0
 template <class T, class Allocator>
 void vector<T, Allocator>::allocate_(size_type n) {
-  if (n > max_size()) this->throw_length_error_();
+  if (n > max_size()) throw_length_error_();
   this->begin_ = this->end_ = alloc_traits_::allocate(this->alloc_, n);
   this->cap_ = this->begin_ + n;
 }
@@ -999,14 +999,14 @@ typename vector<T, Allocator>::const_reference vector<T, Allocator>::operator[](
 // access element of subscript n without bound check
 template <class T, class Allocator>
 typename vector<T, Allocator>::reference vector<T, Allocator>::at(size_type n) {
-  if (n >= size()) this->throw_out_of_range_();
+  if (n >= size()) throw_out_of_range_();
   return this->begin_[n];
 }
 
 template <class T, class Allocator>
 typename vector<T, Allocator>::const_reference vector<T, Allocator>::at(
     size_type n) const {
-  if (n >= size()) this->throw_out_of_range_();
+  if (n >= size()) throw_out_of_range_();
   return this->begin_[n];
 }
 
@@ -1219,7 +1219,7 @@ vector<T, Allocator>::emplace_back(Args &&... args) {
     ++this->end_;
   } else
     emplace_back_when_capacity_is_full_(::std::forward<Args>(args)...);
-  return this->back();
+  return back();
 }
 
 template <class T, class Allocator>
@@ -1262,7 +1262,7 @@ typename vector<T, Allocator>::iterator vector<T, Allocator>::erase(
   // remove the constness
   pointer pos = this->begin_ + (position - begin());
   pointer last = ::std::move(pos + 1, this->end_, pos);
-  this->destroy_at_end_(last);
+  destroy_at_end_(last);
   return iterator(pos);
 }
 
@@ -1273,7 +1273,7 @@ typename vector<T, Allocator>::iterator vector<T, Allocator>::erase(
   pointer pos_last = this->begin_ + (last - begin());
   if (pos_first != pos_last) {
     pointer last = ::std::move(pos_last, this->end_, pos_first);
-    this->destroy_at_end_(last);
+    destroy_at_end_(last);
   }
   return iterator(pos_first);
 }
@@ -1281,7 +1281,7 @@ typename vector<T, Allocator>::iterator vector<T, Allocator>::erase(
 template <class T, class Allocator>
 void vector<T, Allocator>::pop_back() {
   assert(!empty());
-  this->destroy_at_end_(this->end_ - 1);
+  destroy_at_end_(this->end_ - 1);
 }
 
 template <class T, class Allocator>
