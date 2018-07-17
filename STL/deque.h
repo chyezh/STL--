@@ -374,6 +374,7 @@ class __deque_base {
   typedef allocator_traits<pointer_allocator_type> pointer_alloc_traits_;
 
   typedef __split_buffer<pointer, pointer_allocator_type> map_type_;
+  typedef typename map_type_::iterator map_iter_;
   typedef __deque_block_size<T, difference_type> deque_block_size_;
 
  protected:
@@ -543,6 +544,7 @@ class deque : private __deque_base<T, Allocator> {
  private:
   typedef __deque_base<T, Allocator> base_;
   typedef typename base_::alloc_traits_ alloc_traits_;
+  typedef typename base_::pointer_allocator_type pointer_allocator_type;
   typedef typename base_::pointer_alloc_traits_ pointer_alloc_traits_;
   typedef typename base_::map_type_ map_type_;
   typedef typename base_::deque_block_size_ deque_block_size_;
@@ -552,7 +554,6 @@ class deque : private __deque_base<T, Allocator> {
   // >>> member types
   typedef typename base_::value_type value_type;
   typedef typename base_::allocator_type allocator_type;
-  typedef typename allocator_traits<allocator_type> alloc_traits_;
   typedef typename base_::reference reference;
   typedef typename base_::const_reference const_reference;
   typedef typename base_::iterator iterator;
@@ -561,6 +562,13 @@ class deque : private __deque_base<T, Allocator> {
   typedef typename base_::difference_type difference_type;
   typedef typename base_::pointer pointer;
   typedef typename base_::const_pointer const_pointer;
+  typedef ::std::reverse_iterator<iterator> reverse_iterator;
+  typedef ::std::reverse_iterator<const_iterator> const_reverse_iterator;
+
+ private:
+  // type for RAII to keep exception safe after new block is allocated
+  typedef __allocator_destructor<allocator_type> block_destructor_;
+  typedef unique_ptr<pointer, block_destructor_> block_hold_pointer_;
 
  public:
   // >>> constructor
@@ -605,8 +613,7 @@ class deque : private __deque_base<T, Allocator> {
   deque(
       ForwardIterator first,
       typename enable_if<
-          __is_input_iterator<ForwardIterator>::value &&
-              !__is_forward_iterator<ForwardIterator>::value &&
+          __is_forward_iterator<ForwardIterator>::value &&
               is_constructible<
                   value_type,
                   typename iterator_traits<ForwardIterator>::reference>::value,
@@ -616,8 +623,7 @@ class deque : private __deque_base<T, Allocator> {
   deque(
       ForwardIterator first,
       typename enable_if<
-          __is_input_iterator<ForwardIterator>::value &&
-              !__is_forward_iterator<ForwardIterator>::value &&
+          __is_forward_iterator<ForwardIterator>::value &&
               is_constructible<
                   value_type,
                   typename iterator_traits<ForwardIterator>::reference>::value,
@@ -687,11 +693,11 @@ class deque : private __deque_base<T, Allocator> {
   // plain iterator
   iterator begin() noexcept { return base_::begin(); }
 
-  const_iterator begin() const noexcept { return begin(); }
+  const_iterator begin() const noexcept { return base_::begin(); }
 
   iterator end() noexcept { return base_::end(); }
 
-  const_iterator end() const noexcept { return end(); }
+  const_iterator end() const noexcept { return base_::end(); }
 
   // reverse iterator
   reverse_iterator rbegin() noexcept { return reverse_iterator(end()); }
@@ -716,7 +722,7 @@ class deque : private __deque_base<T, Allocator> {
   const_reverse_iterator crend() const noexcept { return rend(); }
 
   // >>> capacity
-  size_type size() const noexcept { return bese_::size(); }
+  size_type size() const noexcept { return base_::size(); }
 
   size_type max_size() const noexcept {
     return alloc_traits_::max_size(this->alloc_);
@@ -824,16 +830,254 @@ class deque : private __deque_base<T, Allocator> {
   // throw out of range error
   void throw_out_of_range_() const { throw ::std::out_of_range("vector"); }
 
+  // calculate how many blocks can contain n element
+  size_type block_alloc_strategy_(size_type n) const {
+    // if map_ is empty(), n += 1
+    // for keeping map_iter_ of end() vaild, keep a position in the last slot.
+    n += static_cast<size_type>(this->map_.empty());
+    return n / this->block_size_() +
+           static_cast<size_type>(n % this->block_size_() != 0);
+  }
+
+  // query rest space
   // return the rest front space of deque
   size_type front_spare_() const { return this->start_; }
 
   // return the rest back space of deque
-  size_type back_spare_() const { 
+  size_type back_spare_() const {
     // for keeping map_iter_ of end() vaild, keep a position in the last slot.
-    return this->block_size_() * this->map_.size() - 1 - front_spare_() - size();
+    return this->block_size_() * this->map_.size() - 1 - front_spare_() -
+           size();
   }
 
+  // alloc additional space, strong guarentee exception safe
+  void alloc_front_();
+
+  void alloc_front_(size_type n);
+
+  void alloc_back_();
+
+  void alloc_back_(size_type n);
+
+  
+
+  
 };
+
+// >>> private auxiliary function
+
+// >>> alloc additional space, strong guarentee exception safe
+// add empty block at front of map
+template <class T, class Allocator>
+void deque<T, Allocator>::alloc_front_() {
+  // if back_spare_() > block_size, move the back free block to front
+  if (back_spare_() >= this->block_size_()) {
+    pointer p = this->map_.back();
+    this->map_.pop_back();
+    this->map_.push_front(p);
+    // if map_ do not reserve
+  } else if (this->map_.size() < this->map_.capacity()) {
+    // do allocate to the front
+    if (this->map_.front_spare_() > 0)
+      this->map_.push_front(
+          alloc_traits_::allocate(this->alloc_, this->block_size_()));
+    else {
+      this->map_.push_back(
+          alloc_traits_::allocate(this->alloc_, this->block_size_()));
+      pointer p = this->map_.back();
+      this->map_.pop_back();
+      this->map_.push_front(p);
+    }
+    // alloc new map
+  } else {
+    // alloc a new buffer at front
+    __split_buffer<pointer, pointer_allocator_type &> swap_buffer(
+        ::std::max<size_type>(2 * this->map_.capacity(), 1), 0,
+        this->map_.alloc_);
+    block_hold_pointer_ hold_ptr(
+        alloc_traits_::allocate(this->alloc_, this->block_size_()));
+    swap_buffer.push_back(hold_ptr.get());
+    hold_ptr.release();
+    for (map_iter_ iter = this->map_.begin(); iter != this->map_.end(); ++iter)
+      swap_buffer.push_back(*iter);
+    this->map_.swap(swap_buffer);
+  }
+  // if original map_ is empty(), set start_ at mid of block
+  if (this->map_.size() == 1)
+    this->start_ = this->block_size_() / 2;
+  else
+    this->start_ += this->block_size_();
+}
+
+// add empty block at front of map
+template <class T, class Allocator>
+void deque<T, Allocator>::alloc_front_(size_type n) {
+  size_type new_block = block_alloc_strategy_(n);
+  size_type move_block = back_spare_() / this->block_size_();
+  move_block = ::std::min<size_type>(new_block, move_block);
+  new_block -= move_block;
+  // if new block is 0, no allocate happen
+  if (new_block == 0) {
+    this->start_ += move_block * this->block_size_();
+    for (; move_block > 0; --move_block) {
+      pointer p = this->map_.back();
+      this->map_.pop_back();
+      this->map_.push_front(p);
+    }
+    // if map_ do not reserve
+  } else if (new_block <= this->map_.capacity() - this->map_.size()) {
+    // fill front first
+    for (; new_block > 0 && this->map_.front_spare_() != 0; --new_block) {
+      this->map_.push_front(
+          alloc_traits_::allocate(this->alloc_, this->block_size_()));
+      this->start_ +=
+          this->block_size_() - static_cast<size_type>(this->map_.size() == 1);
+    }
+    // fill rest at back
+    for (; new_block > 0; --new_block, ++move_block)
+      this->map_.push_back(
+          alloc_traits_::allocate(this->alloc_, this->block_size_()));
+    // move back to front
+    this->start_ += move_block * this->block_size_();
+    for (; move_block > 0; --move_block) {
+      pointer p = this->map_.back();
+      this->map_.pop_back();
+      this->map_.push_front(p);
+    }
+    // alloc new map
+  } else {
+    size_type diff_start = (new_block + move_block) * this->block_size_() -
+                           static_cast<size_type>(this->map_.empty());
+    // alloc a new buffer at front
+    __split_buffer<pointer, pointer_allocator_type &> swap_buffer(
+        ::std::max<size_type>(2 * this->map_.capacity(),
+                              new_block + this->map_.capacity()),
+        0, this->map_.alloc_);
+    // alloc new block in buffer
+    try {
+      for (; new_block > 0; --new_block)
+        swap_buffer.push_back(
+            alloc_traits_::allocate(this->alloc_, this->block_size_()));
+    } catch (...) {
+      // deallocate all block if throw
+      for (map_iter_ iter = swap_buffer.begin(); iter != swap_buffer.end();
+           ++iter)
+        alloc_traits_::deallocate(this->alloc_, *iter, this->block_size_());
+      throw;
+    }
+    for (; move_block > 0; --move_block) {
+      pointer p = this->map_.back();
+      this->map_.pop_back();
+      swap_buffer.push_back(p);
+    }
+    for (map_iter_ iter = this->map_.begin(); iter != this->map_.end(); ++iter)
+      swap_buffer.push_back(*iter);
+    this->map_.swap(swap_buffer);
+    this->start_ += diff_start;
+  }
+}
+
+template <class T, class Allocator>
+void deque<T, Allocator>::alloc_back_() {
+  // if back_spare_() > block_size, move the back free block to front
+  if (front_spare_() >= this->block_size_()) {
+    pointer p = this->map_.front();
+    this->map_.pop_front();
+    this->map_.push_back(p);
+    // if map_ do not reserve
+  } else if (this->map_.size() < this->map_.capacity()) {
+    // do allocate to the front
+    if (this->map_.back_spare_() > 0)
+      this->map_.push_back(
+          alloc_traits_::allocate(this->alloc_, this->block_size_()));
+    else {
+      this->map_.push_front(
+          alloc_traits_::allocate(this->alloc_, this->block_size_()));
+      pointer p = this->map_.front();
+      this->map_.pop_front();
+      this->map_.push_back(p);
+    }
+  } else {
+    __split_buffer<pointer, pointer_allocator_type &> swap_buffer(
+        ::std::max<size_type>(2 * this->map_.capacity(), 1), this->map_.size(),
+        this->map_.alloc_);
+    block_hold_pointer_ hold_ptr(
+        alloc_traits_::allocate(this->alloc_, this->block_size_()));
+    swap_buffer.push_back(hold_ptr.get());
+    hold_ptr.release();
+    for (map_iter_ iter = this->map_.end(); iter != this->map_.begin();)
+      swap_buffer.push_front(*--iter);
+    this->map_.swap(swap_buffer);
+  }
+}
+
+template <class T, class Allocator>
+void deque<T, Allocator>::alloc_back_(size_type n) {
+  size_type new_block = block_alloc_strategy_(n);
+  size_type move_block = front_spare_() / this->block_size_();
+  move_block = ::std::min<size_type>(new_block, move_block);
+  new_block -= move_block;
+  // if new block is 0, no allocate happen
+  if (new_block == 0) {
+    this->start_ -= move_block * this->block_size_();
+    for (; move_block > 0; --move_block) {
+      pointer p = this->map_.front();
+      this->map_.pop_front();
+      this->map_.push_back(p);
+    }
+    // if map_ do not reserve
+  } else if (new_block <= this->map_.capacity() - this->map_.size()) {
+    // fill back first
+    for (; new_block > 0 && this->map_.back_spare_() != 0; --new_block)
+      this->map_.push_back(
+          alloc_traits_::allocate(this->alloc_, this->block_size_()));
+    // fill rest at front
+    for (; new_block > 0; --new_block, ++move_block) {
+      this->map_.push_front(
+          alloc_traits_::allocate(this->alloc_, this->block_size_()));
+      // change start_ to keep exception safe
+      this->start_ +=
+          this->block_size_() - static_cast<size_type>(this->map_.size() == 1);
+    }
+    // move front to start
+    this->start_ -= move_block * this->block_size_();
+    for (; move_block > 0; --move_block) {
+      pointer p = this->map_.front();
+      // pop first to guarantee map_ do shift not realloc
+      this->map_.pop_front();
+      this->map_.push_back(p);
+    }
+    // alloc new map
+  } else {
+    size_type diff_start = move_block * this->block_size_();
+    // alloc a new buffer at front
+    __split_buffer<pointer, pointer_allocator_type &> swap_buffer(
+        ::std::max<size_type>(2 * this->map_.capacity(),
+                              new_block + this->map_.capacity()),
+        this->map_size() - move_block, this->map_.alloc_);
+    // alloc new block in buffer
+    try {
+      for (; new_block > 0; --new_block)
+        swap_buffer.push_back(
+            alloc_traits_::allocate(this->alloc_, this->block_size_()));
+    } catch (...) {
+      // deallocate all block if throw
+      for (map_iter_ iter = swap_buffer.begin(); iter != swap_buffer.end();
+           ++iter)
+        alloc_traits_::deallocate(this->alloc_, *iter, this->block_size_());
+      throw;
+    }
+    for (; move_block > 0; --move_block) {
+      pointer p = this->map_.front();
+      this->map_.pop_front();
+      swap_buffer.push_back(p);
+    }
+    for (map_iter_ iter = this->map_.end(); iter != this->map_.begin();)
+      swap_buffer.push_front(*--iter);
+    this->map_.swap(swap_buffer);
+    this->start_ -= diff_start;
+  }
+}
 
 // >>> constructor
 // constructor with given size and value
@@ -904,13 +1148,15 @@ template <class T, class Allocator>
 deque<T, Allocator>::deque(const deque &x);
 
 template <class T, class Allocator>
-deque<T, Allocator>::deque(deque &&x) noexcept(is_nothrow_move_constructible<allocator_type>::value);
+deque<T, Allocator>::deque(deque &&x) noexcept(
+    is_nothrow_move_constructible<allocator_type>::value);
 
 template <class T, class Allocator>
 deque<T, Allocator>::deque(initializer_list<value_type> init);
 
 template <class T, class Allocator>
-deque<T, Allocator>::deque(initializer_list<value_type> init, const allocator_type &alloc);
+deque<T, Allocator>::deque(initializer_list<value_type> init,
+                           const allocator_type &alloc);
 
 template <class T, class Allocator>
 deque<T, Allocator>::deque(const deque &x, const allocator_type &alloc);
@@ -928,7 +1174,8 @@ deque<T, Allocator> &deque<T, Allocator>::operator=(deque &&x) noexcept(
         &&is_nothrow_move_assignable<allocator_type>::value);
 
 template <class T, class Allocator>
-deque<T, Allocator> &deque<T, Allocator>::operator=(initializer_list<value_type> init) {
+deque<T, Allocator> &deque<T, Allocator>::operator=(
+    initializer_list<value_type> init) {
   assign(init.begin(), init.end());
 }
 
@@ -974,7 +1221,8 @@ template <class T, class Allocator>
 deque<T, Allocator>::reference deque<T, Allocator>::operator[](size_type n);
 
 template <class T, class Allocator>
-deque<T, Allocator>::const_reference deque<T, Allocator>::operator[](size_type n) const;
+deque<T, Allocator>::const_reference deque<T, Allocator>::operator[](
+    size_type n) const;
 
 template <class T, class Allocator>
 deque<T, Allocator>::reference deque<T, Allocator>::at(size_type n);
@@ -998,24 +1246,30 @@ void deque<T, Allocator>::push_back(value_type &&val);
 
 template <class T, class Allocator>
 template <class... Args>
-deque<T, Allocator>::reference deque<T, Allocator>::emplace_front(Args &&... args);
+deque<T, Allocator>::reference deque<T, Allocator>::emplace_front(
+    Args &&... args);
 
 template <class T, class Allocator>
 template <class... Args>
-deque<T, Allocator>::reference deque<T, Allocator>::emplace_back(Args &&... args);
+deque<T, Allocator>::reference deque<T, Allocator>::emplace_back(
+    Args &&... args);
 
 template <class T, class Allocator>
 template <class... Args>
-deque<T, Allocator>::iterator deque<T, Allocator>::emplace(const_iterator pos, Args &&... args);
+deque<T, Allocator>::iterator deque<T, Allocator>::emplace(const_iterator pos,
+                                                           Args &&... args);
 
 template <class T, class Allocator>
-deque<T, Allocator>::iterator deque<T, Allocator>::insert(const_iterator pos, const value_type &val);
+deque<T, Allocator>::iterator deque<T, Allocator>::insert(
+    const_iterator pos, const value_type &val);
 
 template <class T, class Allocator>
-deque<T, Allocator>::iterator deque<T, Allocator>::insert(const_iterator pos, value_type &&val);
+deque<T, Allocator>::iterator deque<T, Allocator>::insert(const_iterator pos,
+                                                          value_type &&val);
 
 template <class T, class Allocator>
-deque<T, Allocator>::iterator deque<T, Allocator>::insert(const_iterator pos, size_type n, const value_type &val);
+deque<T, Allocator>::iterator deque<T, Allocator>::insert(
+    const_iterator pos, size_type n, const value_type &val);
 
 template <class T, class Allocator>
 template <class InputIterator>
@@ -1025,7 +1279,8 @@ typename enable_if<
         is_constructible<value_type, typename iterator_traits<
                                          InputIterator>::reference>::value,
     deque<T, Allocator>::iterator>::type
-deque<T, Allocator>::insert(const_iterator pos, InputIterator first, InputIterator last);
+deque<T, Allocator>::insert(const_iterator pos, InputIterator first,
+                            InputIterator last);
 
 template <class T, class Allocator>
 template <class ForwardIterator>
@@ -1034,10 +1289,12 @@ typename enable_if<
         is_constructible<value_type, typename iterator_traits<
                                          ForwardIterator>::reference>::value,
     deque<T, Allocator>::iterator>::type
- deque<T, Allocator>::insert(const_iterator pos, ForwardIterator first, ForwardIterator last);
+deque<T, Allocator>::insert(const_iterator pos, ForwardIterator first,
+                            ForwardIterator last);
 
 template <class T, class Allocator>
-deque<T, Allocator>::deque<T, Allocator>::iterator deque<T, Allocator>::insert(const_iterator pos, initializer_list<value_type> init);
+deque<T, Allocator>::deque<T, Allocator>::iterator deque<T, Allocator>::insert(
+    const_iterator pos, initializer_list<value_type> init);
 
 // remove
 template <class T, class Allocator>
@@ -1050,15 +1307,15 @@ template <class T, class Allocator>
 deque<T, Allocator>::iterator deque<T, Allocator>::erase(const_iterator p);
 
 template <class T, class Allocator>
-deque<T, Allocator>::iterator deque<T, Allocator>::erase(const_iterator f, const_iterator l);
+deque<T, Allocator>::iterator deque<T, Allocator>::erase(const_iterator f,
+                                                         const_iterator l);
 
 template <class T, class Allocator>
 void deque<T, Allocator>::clear() noexcept;
 
 template <class T, class Allocator>
-void deque<T, Allocator>::swap(deque &c) noexcept(alloc_traits_::is_always_equal::value);
-
-
+void deque<T, Allocator>::swap(deque &c) noexcept(
+    alloc_traits_::is_always_equal::value);
 
 STL_END
 
